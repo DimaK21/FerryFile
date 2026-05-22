@@ -36,4 +36,9 @@ class PreferencesRepositoryTest {
         whenever(prefs.getInt("server_port", 8080)).thenReturn(8080)
         assertEquals(8080, repo.port)
     }
+
+    @Test fun `safUris returns empty list when stored JSON is corrupted`() {
+        whenever(prefs.getString("saf_uris", "[]")).thenReturn("{not valid json}")
+        assertTrue(repo.safUris.isEmpty())
+    }
 }

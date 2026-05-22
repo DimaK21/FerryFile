@@ -26,7 +26,9 @@ class PreferencesRepository @Inject constructor(private val prefs: SharedPrefere
         set(value) { prefs.edit().putInt(KEY_PORT, value).apply() }
 
     var safUris: List<String>
-        get() = Json.decodeFromString(prefs.getString(KEY_SAF_URIS, "[]") ?: "[]")
+        get() = runCatching {
+            Json.decodeFromString<List<String>>(prefs.getString(KEY_SAF_URIS, "[]") ?: "[]")
+        }.getOrDefault(emptyList())
         set(value) { prefs.edit().putString(KEY_SAF_URIS, Json.encodeToString(value)).apply() }
 
     var darkTheme: Boolean
