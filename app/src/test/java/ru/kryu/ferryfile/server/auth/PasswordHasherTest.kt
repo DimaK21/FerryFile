@@ -23,4 +23,9 @@ class PasswordHasherTest {
     @Test fun `two hashes of same password differ (salt)`() {
         assertNotEquals(hasher.hash("abc"), hasher.hash("abc"))
     }
+
+    @Test fun `malformed stored hash returns false`() {
+        assertFalse(hasher.verify("secret", "nocolon"))
+        assertFalse(hasher.verify("secret", "oddlength:oddlength"))
+    }
 }

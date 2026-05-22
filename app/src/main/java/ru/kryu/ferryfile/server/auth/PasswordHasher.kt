@@ -1,5 +1,6 @@
 package ru.kryu.ferryfile.server.auth
 
+import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
@@ -23,8 +24,11 @@ class PasswordHasher @Inject constructor() {
     fun verify(password: String, stored: String): Boolean {
         val parts = stored.split(":")
         if (parts.size != 2) return false
-        val salt = parts[0].fromHex()
-        return pbkdf2(password, salt).contentEquals(parts[1].fromHex())
+        val saltHex = parts[0]
+        val hashHex = parts[1]
+        if (saltHex.length % 2 != 0 || hashHex.length % 2 != 0) return false
+        val salt = saltHex.fromHex()
+        return MessageDigest.isEqual(pbkdf2(password, salt), hashHex.fromHex())
     }
 
     private fun pbkdf2(password: String, salt: ByteArray): ByteArray {
