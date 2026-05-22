@@ -14,20 +14,20 @@ class DownloadHandler @Inject constructor() {
 
     fun streamZip(entries: List<Entry>, output: OutputStream, onBytesWritten: (Long) -> Unit) {
         var total = 0L
-        ZipOutputStream(output).use { zip ->
-            for (entry in entries) {
-                zip.putNextEntry(ZipEntry(entry.name))
-                entry.openStream().use { input ->
-                    val buf = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var read: Int
-                    while (input.read(buf).also { read = it } != -1) {
-                        zip.write(buf, 0, read)
-                        total += read
-                        onBytesWritten(total)
-                    }
+        val zip = ZipOutputStream(output)
+        for (entry in entries) {
+            zip.putNextEntry(ZipEntry(entry.name))
+            entry.openStream().use { input ->
+                val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+                var read: Int
+                while (input.read(buf).also { read = it } != -1) {
+                    zip.write(buf, 0, read)
+                    total += read
+                    onBytesWritten(total)
                 }
-                zip.closeEntry()
             }
+            zip.closeEntry()
         }
+        zip.finish()
     }
 }
