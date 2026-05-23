@@ -1,6 +1,9 @@
 package ru.kryu.ferryfile.data
 
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -31,7 +34,13 @@ class PreferencesRepository @Inject constructor(private val prefs: SharedPrefere
         }.getOrDefault(emptyList())
         set(value) { prefs.edit().putString(KEY_SAF_URIS, Json.encodeToString(value)).apply() }
 
+    private val _darkThemeFlow = MutableStateFlow(prefs.getBoolean(KEY_DARK_THEME, true))
+    val darkThemeFlow: StateFlow<Boolean> = _darkThemeFlow.asStateFlow()
+
     var darkTheme: Boolean
-        get() = prefs.getBoolean(KEY_DARK_THEME, true)
-        set(value) { prefs.edit().putBoolean(KEY_DARK_THEME, value).apply() }
+        get() = _darkThemeFlow.value
+        set(value) {
+            prefs.edit().putBoolean(KEY_DARK_THEME, value).apply()
+            _darkThemeFlow.value = value
+        }
 }
