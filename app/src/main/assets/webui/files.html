@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FerryFile</title>
+  <link rel="stylesheet" href="/webui/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <span class="brand">FerryFile</span>
+    <div class="header-actions">
+      <button class="btn btn-danger" id="logout-btn">Logout</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <!-- Progress bar (hidden until transfer starts) -->
+    <div class="progress-container" id="progress-container">
+      <div class="progress-label">
+        <span id="progress-filename">Transferring…</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-details" id="progress-details"></div>
+    </div>
+
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" id="breadcrumb" aria-label="File path"></nav>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <label class="btn btn-secondary" id="upload-label">
+        Upload files
+        <input type="file" id="upload-input" multiple style="display:none" />
+      </label>
+    </div>
+
+    <!-- File listing -->
+    <div class="file-list" id="file-list">
+      <div class="file-list-empty" id="file-list-empty">Loading…</div>
+    </div>
+
+    <!-- Drag-and-drop zone -->
+    <div class="drop-zone" id="drop-zone">
+      Drag &amp; drop files here to upload
+    </div>
+  </main>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="/webui/app.js"></script>
+</body>
+</html>
