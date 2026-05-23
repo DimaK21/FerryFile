@@ -264,7 +264,8 @@
       if (data.bytes != null && data.total != null) {
         details = formatBytes(data.bytes) + ' / ' + formatBytes(data.total);
       }
-      if (data.eta != null) details += (details ? '  \xB7  ' : '') + 'ETA ' + data.eta + 's';
+      var eta = Number(data.eta);
+      if (isFinite(eta)) details += (details ? '  \xB7  ' : '') + 'ETA ' + Math.round(eta) + 's';
       progressDetails.textContent = details;                     // safe: textContent
     });
 
@@ -300,6 +301,7 @@
 
     sseSource.onerror = function () {
       if (sseSource && sseSource.readyState === EventSource.CLOSED) {
+        showToast('Connection to server lost', 'error');
         hideProgress();
         sseSource = null;
       }
