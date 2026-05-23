@@ -1,5 +1,7 @@
 package ru.kryu.ferryfile.server
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.cio.*
@@ -21,6 +23,7 @@ import javax.inject.Singleton
 
 @Singleton
 class KtorServer @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val sessionManager: SessionManager,
     private val passwordHasher: PasswordHasher,
     private val safFileProvider: SafFileProvider,
@@ -37,7 +40,7 @@ class KtorServer @Inject constructor(
             install(ContentNegotiation) { json() }
             install(SSE)
             configureAuthRoutes(sessionManager, { prefs.passwordHash }, passwordHasher)
-            configureFileRoutes(safFileProvider, transferProgress, downloadHandler, uploadHandler)
+            configureFileRoutes(safFileProvider, transferProgress, downloadHandler, uploadHandler, context.assets)
             configureSseRoutes(transferProgress)
         }.start(wait = false)
     }

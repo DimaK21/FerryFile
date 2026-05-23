@@ -1,5 +1,6 @@
 package ru.kryu.ferryfile.server.routes
 
+import android.content.res.AssetManager
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
@@ -31,11 +32,14 @@ fun Application.configureFileRoutes(
     safFileProvider: SafFileProvider,
     transferProgress: TransferProgress,
     downloadHandler: DownloadHandler,
-    uploadHandler: UploadHandler
+    uploadHandler: UploadHandler,
+    assets: AssetManager
 ) {
     routing {
         get("/login") {
-            val html = loadAsset("webui/login.html") ?: "<html>Login</html>"
+            val html = loadAsset(assets, "webui/login.html") ?: run {
+                call.respond(HttpStatusCode.InternalServerError); return@get
+            }
             call.respondText(html, ContentType.Text.Html)
         }
 
@@ -49,7 +53,7 @@ fun Application.configureFileRoutes(
                 path.endsWith(".js") -> ContentType.Application.JavaScript
                 else -> ContentType.Text.Plain
             }
-            val content = loadAsset("webui/$path") ?: run {
+            val content = loadAsset(assets, "webui/$path") ?: run {
                 call.respond(HttpStatusCode.NotFound); return@get
             }
             call.respondText(content, contentType)
@@ -61,7 +65,9 @@ fun Application.configureFileRoutes(
 
         authenticate("session") {
             get("/files") {
-                val html = loadAsset("webui/files.html") ?: "<html>Files</html>"
+                val html = loadAsset(assets, "webui/files.html") ?: run {
+                    call.respond(HttpStatusCode.InternalServerError); return@get
+                }
                 call.respondText(html, ContentType.Text.Html)
             }
 
@@ -172,5 +178,5 @@ fun Application.configureFileRoutes(
     }
 }
 
-private fun Application.loadAsset(path: String): String? =
-    environment.classLoader.getResourceAsStream(path)?.bufferedReader()?.use { it.readText() }
+private fun loadAsset(assets: AssetManager, path: String): String? =
+    runCatching { assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()
