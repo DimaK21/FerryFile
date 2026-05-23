@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FerryFile — Login</title>
+  <link rel="stylesheet" href="/webui/style.css" />
+</head>
+<body>
+  <div class="login-wrapper">
+    <div class="login-card">
+      <h1>FerryFile</h1>
+      <p class="subtitle">Enter the password shown on your Android device</p>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            autocomplete="current-password"
+            autofocus
+            required
+          />
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+          Unlock
+        </button>
+      </form>
+
+      <div id="error-msg" class="message error" role="alert"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var form = document.getElementById('login-form');
+      var passwordInput = document.getElementById('password');
+      var submitBtn = document.getElementById('submit-btn');
+      var errorMsg = document.getElementById('error-msg');
+
+      function showError(text) {
+        errorMsg.textContent = text;
+        errorMsg.classList.add('visible');
+      }
+
+      function clearError() {
+        errorMsg.textContent = '';
+        errorMsg.classList.remove('visible');
+      }
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        clearError();
+
+        var pwd = passwordInput.value;
+        if (!pwd) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Checking…';
+
+        fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
+        })
+          .then(function (res) {
+            if (res.ok) {
+              window.location.href = '/files';
+            } else if (res.status === 429) {
+              showError('Too many attempts, wait 30s');
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Unlock';
+            } else if (res.status === 401) {
+              showError('Wrong password');
+              passwordInput.value = '';
+              passwordInput.focus();
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Unlock';
+            } else {
+              showError('Unexpected error, please try again');
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Unlock';
+            }
+          })
+          .catch(function () {
+            showError('Network error, please try again');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Unlock';
+          });
+      });
+    })();
+  </script>
+</body>
+</html>
