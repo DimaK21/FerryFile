@@ -39,7 +39,7 @@ fun Application.configureFileRoutes(
             call.respondText(html, ContentType.Text.Html)
         }
 
-        get("/static/{path...}") {
+        get("/webui/{path...}") {
             val path = call.parameters.getAll("path")?.joinToString("/") ?: ""
             if (path.contains("..") || path.startsWith("/")) {
                 call.respond(HttpStatusCode.BadRequest); return@get
