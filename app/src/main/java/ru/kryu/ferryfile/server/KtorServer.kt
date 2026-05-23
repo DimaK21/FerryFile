@@ -10,6 +10,8 @@ import ru.kryu.ferryfile.data.PreferencesRepository
 import ru.kryu.ferryfile.server.auth.PasswordHasher
 import ru.kryu.ferryfile.server.auth.SessionManager
 import ru.kryu.ferryfile.server.routes.configureAuthRoutes
+import ru.kryu.ferryfile.server.routes.configureFileRoutes
+import ru.kryu.ferryfile.server.routes.configureSseRoutes
 import ru.kryu.ferryfile.server.saf.SafFileProvider
 import ru.kryu.ferryfile.server.transfer.DownloadHandler
 import ru.kryu.ferryfile.server.transfer.TransferProgress
@@ -35,7 +37,8 @@ class KtorServer @Inject constructor(
             install(ContentNegotiation) { json() }
             install(SSE)
             configureAuthRoutes(sessionManager, { prefs.passwordHash }, passwordHasher)
-            // configureFileRoutes and configureSseRoutes added in Task 9
+            configureFileRoutes(safFileProvider, transferProgress, downloadHandler, uploadHandler)
+            configureSseRoutes(transferProgress)
         }.start(wait = false)
     }
 

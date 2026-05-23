@@ -65,8 +65,16 @@ fun Application.configureAuthRoutes(
 
 // Test helper — not called in production
 fun Application.configureAuthForTest(sessionManager: SessionManager) {
+    // Custom serializer so tests can set FERRYFILE_SESSION cookie to a raw token string
+    val rawTokenSerializer = object : SessionSerializer<UserSession> {
+        override fun deserialize(text: String): UserSession = UserSession(text)
+        override fun serialize(session: UserSession): String = session.token
+    }
     install(Sessions) {
-        cookie<UserSession>("FERRYFILE_SESSION") { cookie.path = "/" }
+        cookie<UserSession>("FERRYFILE_SESSION") {
+            serializer = rawTokenSerializer
+            cookie.path = "/"
+        }
     }
     install(Authentication) {
         session<UserSession>("session") {
