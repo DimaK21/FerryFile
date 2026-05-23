@@ -33,7 +33,7 @@ class KtorServer @Inject constructor(
 
     fun start(port: Int) {
         sessionManager.reset()
-        engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
+        engine = embeddedServer(CIO, port = port, host = "0.0.0.0", watchPaths = emptyList()) {
             install(ContentNegotiation) { json() }
             install(SSE)
             configureAuthRoutes(sessionManager, { prefs.passwordHash }, passwordHasher)
