@@ -57,12 +57,13 @@ fun Application.configureAuthRoutes(
         }
 
         post("/logout") {
-            call.sessions.set(UserSession(""))
+            call.sessions.clear<UserSession>()
             call.respond(HttpStatusCode.OK)
         }
     }
 }
 
+// Test helper — not called in production
 fun Application.configureAuthForTest(sessionManager: SessionManager) {
     install(Sessions) {
         cookie<UserSession>("FERRYFILE_SESSION") { cookie.path = "/" }

@@ -6,14 +6,20 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.testing.*
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import ru.kryu.ferryfile.server.auth.PasswordHasher
 import ru.kryu.ferryfile.server.auth.SessionManager
 
 class AuthRoutesTest {
     private val hasher = PasswordHasher()
-    private val sessionManager = SessionManager()
-    private val storedHash = hasher.hash("testpass")
+    private lateinit var sessionManager: SessionManager
+    private lateinit var storedHash: String
+
+    @Before fun setUp() {
+        sessionManager = SessionManager()
+        storedHash = hasher.hash("testpass")
+    }
 
     private fun withApp(block: suspend ApplicationTestBuilder.() -> Unit) = testApplication {
         install(ContentNegotiation) { json() }

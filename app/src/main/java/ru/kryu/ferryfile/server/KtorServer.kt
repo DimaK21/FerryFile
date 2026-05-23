@@ -40,7 +40,7 @@ class KtorServer @Inject constructor(
     }
 
     fun stop() {
-        engine?.stop()
+        engine?.stop(gracePeriodMillis = 1_000, timeoutMillis = 5_000)
         engine = null
         sessionManager.reset()
     }
