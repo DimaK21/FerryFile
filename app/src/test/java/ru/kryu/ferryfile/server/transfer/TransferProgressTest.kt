@@ -24,9 +24,10 @@ class TransferProgressTest {
         assertFalse(TransferProgress().isBusy)
     }
 
-    @Test fun `markBusy and markIdle toggle isBusy`() = runTest {
+    @Test fun `tryMarkBusy and markIdle toggle isBusy`() = runTest {
         val p = TransferProgress()
-        p.markBusy(); assertTrue(p.isBusy)
+        assertTrue(p.tryMarkBusy()); assertTrue(p.isBusy)
+        assertFalse(p.tryMarkBusy()) // already busy — CAS returns false
         p.markIdle(); assertFalse(p.isBusy)
     }
 }

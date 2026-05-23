@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ru.kryu.ferryfile.data.PreferencesRepository
+import java.io.InputStream
+import java.io.OutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,4 +56,12 @@ class SafFileProvider @Inject constructor(
         val rootIndex = path.trim('/').split("/").firstOrNull()?.toIntOrNull() ?: return false
         return rootIndex < grantedRoots().size
     }
+
+    fun openInputStream(path: String): InputStream? {
+        val file = resolve(path) ?: return null
+        return context.contentResolver.openInputStream(file.uri)
+    }
+
+    fun openOutputStream(docFile: DocumentFile): OutputStream? =
+        context.contentResolver.openOutputStream(docFile.uri)
 }

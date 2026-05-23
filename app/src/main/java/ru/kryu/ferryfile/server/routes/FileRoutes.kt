@@ -7,13 +7,13 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.sessions.*
 import kotlinx.serialization.Serializable
 import ru.kryu.ferryfile.server.saf.SafFileProvider
 import ru.kryu.ferryfile.server.transfer.DownloadHandler
 import ru.kryu.ferryfile.server.transfer.TransferEvent
 import ru.kryu.ferryfile.server.transfer.TransferProgress
 import ru.kryu.ferryfile.server.transfer.UploadHandler
+import java.io.IOException
 
 @Serializable
 data class FileListResponse(val path: String, val items: List<FileItemDto>)
@@ -41,6 +41,9 @@ fun Application.configureFileRoutes(
 
         get("/static/{path...}") {
             val path = call.parameters.getAll("path")?.joinToString("/") ?: ""
+            if (path.contains("..") || path.startsWith("/")) {
+                call.respond(HttpStatusCode.BadRequest); return@get
+            }
             val contentType = when {
                 path.endsWith(".css") -> ContentType.Text.CSS
                 path.endsWith(".js") -> ContentType.Application.JavaScript
@@ -53,12 +56,7 @@ fun Application.configureFileRoutes(
         }
 
         get("/") {
-            val session = call.sessions.get<UserSession>()
-            if (session != null && session.token.isNotBlank()) {
-                call.respondRedirect("/files")
-            } else {
-                call.respondRedirect("/login")
-            }
+            call.respondRedirect("/login")
         }
 
         authenticate("session") {
@@ -85,25 +83,23 @@ fun Application.configureFileRoutes(
             }
 
             get("/api/download") {
-                val paths = call.request.queryParameters.getAll("paths")
-                    ?: run { call.respond(HttpStatusCode.BadRequest, "paths required"); return@get }
-                if (!paths.all { safFileProvider.isValidPath(it) }) {
+                val path = call.request.queryParameters["path"]
+                    ?: run { call.respond(HttpStatusCode.BadRequest, "path required"); return@get }
+                if (!safFileProvider.isValidPath(path)) {
                     call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@get
                 }
-                if (transferProgress.isBusy) {
+                if (!transferProgress.tryMarkBusy()) {
                     call.respond(HttpStatusCode.Conflict, "Transfer already in progress, try again shortly")
                     return@get
                 }
-                transferProgress.markBusy()
                 try {
-                    val totalSize = paths.sumOf { safFileProvider.resolve(it)?.length() ?: 0L }
-                    val entries = paths.mapNotNull { path ->
-                        val file = safFileProvider.resolve(path)?.takeIf { !it.isDirectory }
-                            ?: return@mapNotNull null
-                        DownloadHandler.Entry(file.name ?: path.substringAfterLast('/'), file.length()) {
-                            call.application.environment.classLoader.getResourceAsStream("")
-                                ?: throw UnsupportedOperationException("ContentResolver required on device")
-                        }
+                    val file = safFileProvider.resolve(path)?.takeIf { !it.isDirectory }
+                        ?: run { call.respond(HttpStatusCode.NotFound); return@get }
+                    val totalSize = file.length()
+                    val fileName = file.name ?: path.substringAfterLast('/')
+                    val entry = DownloadHandler.Entry(fileName, totalSize) {
+                        safFileProvider.openInputStream(path)
+                            ?: throw IOException("Cannot open $path")
                     }
                     call.response.header(
                         HttpHeaders.ContentDisposition,
@@ -112,11 +108,11 @@ fun Application.configureFileRoutes(
                             .toString()
                     )
                     call.respondOutputStream(ContentType.Application.Zip) {
-                        downloadHandler.streamZip(entries, this) { bytes ->
+                        downloadHandler.streamZip(listOf(entry), this) { bytes ->
                             val pct = if (totalSize > 0) (bytes * 100 / totalSize).toInt() else 0
-                            transferProgress.tryEmit(TransferEvent.Progress("ferryfile.zip", bytes, totalSize, pct, 0))
+                            transferProgress.tryEmit(TransferEvent.Progress(fileName, bytes, totalSize, pct, 0))
                         }
-                        transferProgress.tryEmit(TransferEvent.Done(entries.size, totalSize))
+                        transferProgress.tryEmit(TransferEvent.Done(1, totalSize))
                     }
                 } finally {
                     transferProgress.markIdle()
@@ -129,28 +125,42 @@ fun Application.configureFileRoutes(
                 if (!safFileProvider.isValidPath(dirPath)) {
                     call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@post
                 }
-                if (transferProgress.isBusy) {
+                if (!transferProgress.tryMarkBusy()) {
                     call.respond(HttpStatusCode.Conflict, "Transfer already in progress, try again shortly")
                     return@post
                 }
-                transferProgress.markBusy()
                 var filesWritten = 0
                 var totalBytes = 0L
                 try {
                     val multipart = call.receiveMultipart()
                     var part = multipart.readPart()
                     while (part != null) {
-                        if (part is PartData.FileItem) {
-                            val fileName = part.originalFileName ?: "upload_$filesWritten"
-                            val destFile = safFileProvider.createFileInPath(
-                                dirPath, fileName,
-                                part.contentType?.toString() ?: "application/octet-stream"
-                            )
-                            if (destFile != null) {
-                                filesWritten++
+                        try {
+                            if (part is PartData.FileItem) {
+                                val fileName = part.originalFileName ?: "upload_$filesWritten"
+                                val destFile = safFileProvider.createFileInPath(
+                                    dirPath, fileName,
+                                    part.contentType?.toString() ?: "application/octet-stream"
+                                )
+                                if (destFile != null) {
+                                    var fileBytes = 0L
+                                    safFileProvider.openOutputStream(destFile)?.use { out ->
+                                        part.streamProvider().use { input ->
+                                            uploadHandler.writeEntry(input, out) { cumulative ->
+                                                fileBytes = cumulative
+                                                transferProgress.tryEmit(
+                                                    TransferEvent.Progress(fileName, totalBytes + cumulative, -1L, 0, 0)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    totalBytes += fileBytes
+                                    filesWritten++
+                                }
                             }
+                        } finally {
+                            part.dispose()
                         }
-                        part.dispose()
                         part = multipart.readPart()
                     }
                     call.respond(HttpStatusCode.OK, mapOf("files" to filesWritten, "bytes" to totalBytes))
@@ -163,4 +173,4 @@ fun Application.configureFileRoutes(
 }
 
 private fun Application.loadAsset(path: String): String? =
-    environment.classLoader.getResourceAsStream(path)?.bufferedReader()?.readText()
+    environment.classLoader.getResourceAsStream(path)?.bufferedReader()?.use { it.readText() }

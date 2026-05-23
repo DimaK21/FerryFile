@@ -17,6 +17,6 @@ class TransferProgress @Inject constructor() {
 
     suspend fun emit(event: TransferEvent) = _events.emit(event)
     fun tryEmit(event: TransferEvent) { _events.tryEmit(event) }
-    fun markBusy() = _isBusy.set(true)
+    fun tryMarkBusy(): Boolean = _isBusy.compareAndSet(false, true)
     fun markIdle() = _isBusy.set(false)
 }
