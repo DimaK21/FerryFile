@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ru.kryu.ferryfile.data.PreferencesRepository
 import ru.kryu.ferryfile.server.auth.PasswordHasher
 import javax.inject.Inject
@@ -51,8 +52,8 @@ class SettingsViewModel @Inject constructor(
 
     fun setPassword(newPassword: String) {
         if (newPassword.isBlank()) return
-        viewModelScope.launch(Dispatchers.Default) {
-            val hash = hasher.hash(newPassword)
+        viewModelScope.launch {
+            val hash = withContext(Dispatchers.Default) { hasher.hash(newPassword) }
             prefs.passwordHash = hash
             _uiState.update { it.copy(hasPassword = true) }
         }
@@ -69,12 +70,16 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun addSafUri(uri: Uri) {
-        context.contentResolver.takePersistableUriPermission(
-            uri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        )
-        prefs.safUris = prefs.safUris + uri.toString()
-        _uiState.update { it.copy(safUris = prefs.safUris) }
+        val granted = runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }.isSuccess
+        if (!granted) return
+        val updated = prefs.safUris + uri.toString()
+        prefs.safUris = updated
+        _uiState.update { it.copy(safUris = updated) }
     }
 
     fun removeSafUri(uri: String) {
@@ -84,7 +89,8 @@ class SettingsViewModel @Inject constructor(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
         }
-        prefs.safUris = prefs.safUris.filter { it != uri }
-        _uiState.update { it.copy(safUris = prefs.safUris) }
+        val updated = prefs.safUris.filter { it != uri }
+        prefs.safUris = updated
+        _uiState.update { it.copy(safUris = updated) }
     }
 }

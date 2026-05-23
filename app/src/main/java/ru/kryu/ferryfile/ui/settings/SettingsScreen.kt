@@ -192,7 +192,7 @@ fun SettingsScreen(
             )
         } else {
             uiState.safUris.forEach { uriString ->
-                val displayName = Uri.parse(uriString).lastPathSegment ?: uriString
+                val displayName = Uri.decode(Uri.parse(uriString).lastPathSegment ?: uriString)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
