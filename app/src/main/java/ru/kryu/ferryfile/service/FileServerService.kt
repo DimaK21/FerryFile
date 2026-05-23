@@ -38,7 +38,7 @@ class FileServerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> {
+            ACTION_START -> if (!ktorServer.isRunning) {
                 val port = prefs.port
                 startForeground(
                     NOTIFICATION_ID,

@@ -29,7 +29,7 @@ class KtorServer @Inject constructor(
     private val uploadHandler: UploadHandler,
     private val prefs: PreferencesRepository
 ) {
-    private var engine: EmbeddedServer<*, *>? = null
+    @Volatile private var engine: EmbeddedServer<*, *>? = null
 
     fun start(port: Int) {
         sessionManager.reset()
