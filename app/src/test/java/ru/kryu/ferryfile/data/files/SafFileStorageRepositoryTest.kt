@@ -42,6 +42,15 @@ class SafFileStorageRepositoryTest {
         assertTrue(nodes.all { it.isDirectory })
     }
 
+    @Test fun `listRoot keeps the original index of a surviving root after a broken one`() = runTest {
+        val docs = folder("Docs")
+        whenever(rootsProvider.roots()).thenReturn(listOf(null, docs))
+
+        val nodes = repo.listRoot()
+
+        assertEquals(listOf("1"), nodes.map { it.path.raw })
+    }
+
     @Test fun `list maps children to nested paths`() = runTest {
         val dir = folder("docs")
         val report = file("report.pdf", 42L)

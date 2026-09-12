@@ -47,4 +47,12 @@ class SafPathResolverTest {
         whenever(root.findFile("ghost")).thenReturn(null)
         assertNull(resolver.resolve(FilePath.parse("0/ghost/deeper")!!))
     }
+
+    @Test fun `a broken shared folder does not shift the roots after it`() {
+        val second = dir()
+        whenever(rootsProvider.roots()).thenReturn(listOf(null, second))
+
+        assertSame(second, resolver.resolve(FilePath.parse("1")!!))
+        assertNull(resolver.resolve(FilePath.parse("0")!!))
+    }
 }

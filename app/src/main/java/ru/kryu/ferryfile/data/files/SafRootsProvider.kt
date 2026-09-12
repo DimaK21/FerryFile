@@ -15,7 +15,7 @@ class SafRootsProvider @Inject constructor(
     private val settings: SettingsRepository
 ) {
 
-    fun roots(): List<DocumentFile> = settings.sharedFolders.value.mapNotNull { folder ->
+    fun roots(): List<DocumentFile?> = settings.sharedFolders.value.map { folder ->
         runCatching { DocumentFile.fromTreeUri(context, Uri.parse(folder.uri)) }.getOrNull()
     }
 }

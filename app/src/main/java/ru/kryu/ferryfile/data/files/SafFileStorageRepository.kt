@@ -21,7 +21,8 @@ class SafFileStorageRepository @Inject constructor(
 ) : FileStorageRepository {
 
     override suspend fun listRoot(): List<FileNode> = withContext(Dispatchers.IO) {
-        roots.roots().mapIndexed { index, root ->
+        roots.roots().mapIndexedNotNull { index, root ->
+            root ?: return@mapIndexedNotNull null
             FileNode(
                 path = FilePath.root(index),
                 name = root.name ?: "Folder ${index + 1}",
