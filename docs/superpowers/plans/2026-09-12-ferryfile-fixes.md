@@ -888,22 +888,27 @@ abstract class RepositoryModule {
             val darkTheme by settings.darkTheme.collectAsStateWithLifecycle()
 ```
 
-В `SettingsViewModel.kt` — временно (до Задачи 5) заменить `PreferencesRepository` на `SettingsRepository`, убрать `@ApplicationContext context`, а `addSafUri`/`removeSafUri` перевести на `viewModelScope.launch { settings.addSharedFolder(uri.toString()) }`; состояние собрать из потоков:
+В `SettingsViewModel.kt` — временно (до Задачи 5) заменить `PreferencesRepository` на `SettingsRepository`, убрать `@ApplicationContext context`, а `addSafUri`/`removeSafUri` перевести на `viewModelScope.launch { … }`; состояние собрать из потоков:
+
+```kotlin
+data class SettingsUiState(
+    val port: Int = 8080,
+    val darkTheme: Boolean = true,
+    val sharedFolders: List<SharedFolder> = emptyList()
+)
+```
 
 ```kotlin
     val uiState: StateFlow<SettingsUiState> = combine(
         settings.port, settings.darkTheme, settings.sharedFolders
     ) { port, dark, folders ->
-        SettingsUiState(
-            port = port.value,
-            darkTheme = dark,
-            sharedFolders = folders,
-            hasPassword = uiState.value.hasPassword
-        )
+        SettingsUiState(port = port.value, darkTheme = dark, sharedFolders = folders)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 ```
 
-Поле `hasPassword` пока оставить как есть — парольная схема уходит в Задаче 8. `SettingsScreen` правится под новое поле `sharedFolders: List<SharedFolder>` (отображать `folder.displayName`, передавать `folder.uri` в remove).
+Пароль уходит из слоя UI уже здесь, иначе `combine` пришлось бы кормить значением из ещё не созданного `uiState`. Конкретно: из `SettingsUiState` убирается `hasPassword`, из `SettingsScreen` — вся секция Password (статус, поле ввода, кнопки Set/Clear), из `HomeUiState` — `hasPassword`, а из `HomeScreen` — карточка-предупреждение и `enabled = uiState.hasPassword` у кнопки Start. Хранимый хеш до Задачи 8 читает только `KtorServer` напрямую из `SharedPreferences`, поэтому уже настроенный пароль продолжает работать; на чистой установке вход в веб-интерфейс между Задачами 3 и 8 недоступен — это промежуточное состояние, которое снимает Задача 8.
+
+`SettingsScreen` правится под новое поле `sharedFolders: List<SharedFolder>` (отображать `folder.displayName`, передавать `folder.uri` в remove).
 
 В `HomeViewModel.kt`, `KtorServer.kt`, `SafFileProvider.kt`, `FileServerService.kt` заменить тип инжектируемой зависимости `PreferencesRepository` на `SettingsRepository`, а обращения: `prefs.port` → `settings.port.value.value`, `prefs.safUris` → `settings.sharedFolders.value.map { it.uri }`, `prefs.passwordHash` оставить временно — перенести чтение хеша прямо в `KtorServer` через `SharedPreferences`, поскольку из репозитория пароль ушёл:
 
