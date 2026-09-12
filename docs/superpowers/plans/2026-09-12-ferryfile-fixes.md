@@ -50,7 +50,7 @@
 
 ---
 
-### Задача 1: Починить компиляцию тестов (базовая линия)
+### Task 1: Починить компиляцию тестов (базовая линия)
 
 Сейчас тестовый sourceSet не компилируется: `configureFileRoutes` получил пятый параметр `assets`, а тест его не передаёт. До начала рефакторинга ветка должна быть зелёной.
 
@@ -94,7 +94,7 @@ git commit -m "test: fix FileRoutesTest compilation after AssetManager parameter
 
 ---
 
-### Задача 2: Модели domain и тест чистоты слоя
+### Task 2: Модели domain и тест чистоты слоя
 
 **Files:**
 - Create: `app/src/main/java/ru/kryu/ferryfile/domain/model/FilePath.kt`
@@ -561,7 +561,7 @@ git commit -m "feat(domain): add domain models and layer purity test"
 
 ---
 
-### Задача 3: SettingsRepository — интерфейс, реактивная реализация, биндинги
+### Task 3: SettingsRepository — интерфейс, реактивная реализация, биндинги
 
 Переводит настройки на `StateFlow` целиком (сейчас реактивна только тема) и убирает `Context` из `SettingsViewModel`.
 
@@ -943,7 +943,7 @@ git commit -m "refactor(data): introduce SettingsRepository interface with react
 
 ---
 
-### Задача 4: FileStorageRepository поверх SAF
+### Task 4: FileStorageRepository поверх SAF
 
 `SafFileProvider` распадается на три части: `SafRootsProvider` (список корней), `SafPathResolver` (обход сегментов) и `SafFileStorageRepository` (реализация доменного интерфейса). Разбор пути уже живёт в `FilePath`, поэтому `isValidPath` исчезает как понятие.
 
@@ -1330,7 +1330,7 @@ git commit -m "feat(data): add SAF-backed FileStorageRepository with path resolv
 
 ---
 
-### Задача 5: Use cases, сеть, PIN-хранилище, состояние сервера, ViewModel'и
+### Task 5: Use cases, сеть, PIN-хранилище, состояние сервера, ViewModel'и
 
 Самая крупная задача: появляется слой use cases, `HomeViewModel` перестаёт знать про `ConnectivityManager`, zxing и `KtorServer`, а `SafFileProvider` удаляется.
 
@@ -2441,7 +2441,7 @@ git commit -m "refactor: move business logic into use cases and drop QR code gen
 
 ---
 
-### Задача 6: Починить загрузку с ПК на телефон
+### Task 6: Починить загрузку с ПК на телефон
 
 Три бага сразу: несериализуемый ответ, запись в виртуальный корень и отсутствие события `Done`. Плюс снимается глобальный лок и появляется `transferId`.
 
@@ -3093,7 +3093,7 @@ git commit -m "fix(upload): store files from the browser and report real progres
 
 ---
 
-### Задача 7: Скачивание — файл напрямую, папка и выборка архивом
+### Task 7: Скачивание — файл напрямую, папка и выборка архивом
 
 **Files:**
 - Modify: `app/src/main/java/ru/kryu/ferryfile/server/routes/FileRoutes.kt`
@@ -3450,7 +3450,7 @@ git commit -m "fix(download): stream single files as-is and zip only folders or 
 
 ---
 
-### Задача 8: Одноразовый PIN вместо пароля
+### Task 8: Одноразовый PIN вместо пароля
 
 **Files:**
 - Modify: `app/src/main/java/ru/kryu/ferryfile/server/routes/AuthRoutes.kt`
@@ -3711,7 +3711,7 @@ git commit -m "feat(auth): replace the stored password with a single-use 6-digit
 
 ---
 
-### Задача 9: Экраны Android — TopAppBar, адрес с PIN, подсказка про папки, «Стоп» в уведомлении
+### Task 9: Экраны Android — TopAppBar, адрес с PIN, подсказка про папки, «Стоп» в уведомлении
 
 **Files:**
 - Create: `app/src/main/res/drawable/ic_arrow_back.xml`
@@ -4118,7 +4118,7 @@ git commit -m "feat(ui): add top app bars with standard icons, connection card a
 
 ---
 
-### Задача 10: Веб-интерфейс — множественный выбор и внятные пустые состояния
+### Task 10: Веб-интерфейс — множественный выбор и внятные пустые состояния
 
 **Files:**
 - Modify: `app/src/main/assets/webui/files.html`
@@ -4306,7 +4306,7 @@ git commit -m "feat(webui): add multi-select downloads, folder download and clea
 
 ---
 
-### Задача 11: Финальная проверка и удаление хвостов
+### Task 11: Финальная проверка и удаление хвостов
 
 **Files:**
 - Modify: любые файлы, где остались ссылки на удалённые сущности
