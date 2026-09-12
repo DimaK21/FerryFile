@@ -9,11 +9,13 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import ru.kryu.ferryfile.server.saf.SafFileProvider
+import ru.kryu.ferryfile.domain.model.FilePath
+import ru.kryu.ferryfile.domain.usecase.DownloadSelectionUseCase
+import ru.kryu.ferryfile.domain.usecase.ListDirectoryUseCase
+import ru.kryu.ferryfile.domain.usecase.SaveUploadUseCase
 import ru.kryu.ferryfile.server.transfer.DownloadHandler
 import ru.kryu.ferryfile.server.transfer.TransferEvent
 import ru.kryu.ferryfile.server.transfer.TransferProgress
-import ru.kryu.ferryfile.server.transfer.UploadHandler
 import java.io.IOException
 
 @Serializable
@@ -28,11 +30,15 @@ data class FileItemDto(
     val path: String
 )
 
+@Serializable
+data class ErrorResponse(val error: String)
+
 fun Application.configureFileRoutes(
-    safFileProvider: SafFileProvider,
+    listDirectory: ListDirectoryUseCase,
+    downloadSelection: DownloadSelectionUseCase,
+    saveUpload: SaveUploadUseCase,
     transferProgress: TransferProgress,
-    downloadHandler: DownloadHandler,
-    uploadHandler: UploadHandler,
+    zipStreamWriter: DownloadHandler,
     assets: AssetManager
 ) {
     routing {
@@ -72,41 +78,31 @@ fun Application.configureFileRoutes(
             }
 
             get("/api/list") {
-                val path = call.request.queryParameters["path"] ?: "/"
-                val items = if (path == "/") {
-                    safFileProvider.listRoot()
-                } else {
-                    if (!safFileProvider.isValidPath(path)) {
-                        call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@get
-                    }
-                    safFileProvider.listPath(path) ?: run {
-                        call.respond(HttpStatusCode.NotFound); return@get
-                    }
-                }
-                call.respond(FileListResponse(path, items.map {
-                    FileItemDto(it.name, it.size, it.lastModified, it.isDirectory, it.apiPath)
+                val path = FilePath.parse(call.request.queryParameters["path"])
+                    ?: run { call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_path")); return@get }
+                val items = listDirectory(path)
+                    ?: run { call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")); return@get }
+                call.respond(FileListResponse(path.raw, items.map {
+                    FileItemDto(it.name, it.sizeBytes, it.lastModified, it.isDirectory, it.path.raw)
                 }))
             }
 
             get("/api/download") {
-                val path = call.request.queryParameters["path"]
-                    ?: run { call.respond(HttpStatusCode.BadRequest, "path required"); return@get }
-                if (!safFileProvider.isValidPath(path)) {
-                    call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@get
-                }
+                val path = FilePath.parse(call.request.queryParameters["path"])
+                    ?: run { call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@get }
                 if (!transferProgress.tryMarkBusy()) {
                     call.respond(HttpStatusCode.Conflict, "Transfer already in progress, try again shortly")
                     return@get
                 }
                 try {
-                    val file = safFileProvider.resolve(path)?.takeIf { !it.isDirectory }
+                    val selection = downloadSelection.resolve(listOf(path))
+                    val single = selection as? DownloadSelectionUseCase.Selection.SingleFile
                         ?: run { call.respond(HttpStatusCode.NotFound); return@get }
-                    val totalSize = file.length()
-                    val fileName = file.name ?: path.substringAfterLast('/')
-                    val entry = DownloadHandler.Entry(fileName, totalSize) {
-                        safFileProvider.openInputStream(path)
-                            ?: throw IOException("Cannot open $path")
-                    }
+                    val fileName = single.node.name
+                    val totalSize = single.node.sizeBytes
+                    val stream = downloadSelection.open(path)
+                        ?: throw IOException("Cannot open ${path.raw}")
+                    val entry = DownloadHandler.Entry(fileName, totalSize) { stream }
                     call.response.header(
                         HttpHeaders.ContentDisposition,
                         ContentDisposition.Attachment
@@ -114,7 +110,7 @@ fun Application.configureFileRoutes(
                             .toString()
                     )
                     call.respondOutputStream(ContentType.Application.Zip) {
-                        downloadHandler.streamZip(listOf(entry), this) { bytes ->
+                        zipStreamWriter.streamZip(listOf(entry), this) { bytes ->
                             val pct = if (totalSize > 0) (bytes * 100 / totalSize).toInt() else 0
                             transferProgress.tryEmit(TransferEvent.Progress(fileName, bytes, totalSize, pct, 0))
                         }
@@ -126,11 +122,8 @@ fun Application.configureFileRoutes(
             }
 
             post("/api/upload") {
-                val dirPath = call.request.queryParameters["path"]
-                    ?: run { call.respond(HttpStatusCode.BadRequest, "path required"); return@post }
-                if (!safFileProvider.isValidPath(dirPath)) {
-                    call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@post
-                }
+                val dirPath = FilePath.parse(call.request.queryParameters["path"])
+                    ?: run { call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@post }
                 if (!transferProgress.tryMarkBusy()) {
                     call.respond(HttpStatusCode.Conflict, "Transfer already in progress, try again shortly")
                     return@post
@@ -144,22 +137,17 @@ fun Application.configureFileRoutes(
                         try {
                             if (part is PartData.FileItem) {
                                 val fileName = part.originalFileName ?: "upload_$filesWritten"
-                                val destFile = safFileProvider.createFileInPath(
-                                    dirPath, fileName,
-                                    part.contentType?.toString() ?: "application/octet-stream"
-                                )
-                                if (destFile != null) {
-                                    var fileBytes = 0L
-                                    safFileProvider.openOutputStream(destFile)?.use { out ->
-                                        part.streamProvider().use { input ->
-                                            uploadHandler.writeEntry(input, out) { cumulative ->
-                                                fileBytes = cumulative
-                                                transferProgress.tryEmit(
-                                                    TransferEvent.Progress(fileName, totalBytes + cumulative, -1L, 0, 0)
-                                                )
-                                            }
-                                        }
+                                val mimeType = part.contentType?.toString() ?: "application/octet-stream"
+                                var fileBytes = 0L
+                                val result = part.streamProvider().use { input ->
+                                    saveUpload(dirPath, fileName, mimeType, input) { cumulative ->
+                                        fileBytes = cumulative
+                                        transferProgress.tryEmit(
+                                            TransferEvent.Progress(fileName, totalBytes + cumulative, -1L, 0, 0)
+                                        )
                                     }
+                                }
+                                if (result is SaveUploadUseCase.Result.Saved) {
                                     totalBytes += fileBytes
                                     filesWritten++
                                 }

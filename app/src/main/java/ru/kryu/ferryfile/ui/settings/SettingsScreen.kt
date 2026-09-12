@@ -41,13 +41,12 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     var portText by remember(uiState.port) { mutableStateOf(uiState.port.toString()) }
-    var isPortError by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         if (uri != null) {
-            viewModel.addSafUri(uri.toString())
+            viewModel.onFolderPicked(uri.toString())
         }
     }
 
@@ -88,17 +87,11 @@ fun SettingsScreen(
             value = portText,
             onValueChange = { newValue ->
                 portText = newValue
-                val parsed = newValue.toIntOrNull()
-                if (parsed != null && parsed in 1024..65535) {
-                    isPortError = false
-                    viewModel.setPort(parsed)
-                } else {
-                    isPortError = true
-                }
+                viewModel.onPortChanged(newValue)
             },
             label = { Text("Port (1024–65535)") },
-            isError = isPortError,
-            supportingText = if (isPortError) {
+            isError = uiState.portError,
+            supportingText = if (uiState.portError) {
                 { Text("Port must be between 1024 and 65535") }
             } else null,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -121,7 +114,7 @@ fun SettingsScreen(
             )
             Switch(
                 checked = uiState.darkTheme,
-                onCheckedChange = { viewModel.setDarkTheme(it) }
+                onCheckedChange = { viewModel.onDarkThemeChanged(it) }
             )
         }
 
@@ -155,7 +148,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { viewModel.removeSafUri(folder.uri) }) {
+                    TextButton(onClick = { viewModel.onFolderRemoved(folder.uri) }) {
                         Text("Remove", color = MaterialTheme.colorScheme.error)
                     }
                 }

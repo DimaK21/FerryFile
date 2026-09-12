@@ -9,15 +9,16 @@ import io.ktor.server.cio.*
 import io.ktor.server.engine.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.sse.*
+import ru.kryu.ferryfile.domain.usecase.DownloadSelectionUseCase
+import ru.kryu.ferryfile.domain.usecase.ListDirectoryUseCase
+import ru.kryu.ferryfile.domain.usecase.SaveUploadUseCase
 import ru.kryu.ferryfile.server.auth.PasswordHasher
 import ru.kryu.ferryfile.server.auth.SessionManager
 import ru.kryu.ferryfile.server.routes.configureAuthRoutes
 import ru.kryu.ferryfile.server.routes.configureFileRoutes
 import ru.kryu.ferryfile.server.routes.configureSseRoutes
-import ru.kryu.ferryfile.server.saf.SafFileProvider
 import ru.kryu.ferryfile.server.transfer.DownloadHandler
 import ru.kryu.ferryfile.server.transfer.TransferProgress
-import ru.kryu.ferryfile.server.transfer.UploadHandler
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,10 +27,11 @@ class KtorServer @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sessionManager: SessionManager,
     private val passwordHasher: PasswordHasher,
-    private val safFileProvider: SafFileProvider,
+    private val listDirectory: ListDirectoryUseCase,
+    private val downloadSelection: DownloadSelectionUseCase,
+    private val saveUpload: SaveUploadUseCase,
     private val transferProgress: TransferProgress,
     private val downloadHandler: DownloadHandler,
-    private val uploadHandler: UploadHandler,
     private val prefs: SharedPreferences
 ) {
     @Volatile private var engine: EmbeddedServer<*, *>? = null
@@ -43,7 +45,14 @@ class KtorServer @Inject constructor(
             install(ContentNegotiation) { json() }
             install(SSE)
             configureAuthRoutes(sessionManager, { passwordHash }, passwordHasher)
-            configureFileRoutes(safFileProvider, transferProgress, downloadHandler, uploadHandler, context.assets)
+            configureFileRoutes(
+                listDirectory,
+                downloadSelection,
+                saveUpload,
+                transferProgress,
+                downloadHandler,
+                context.assets
+            )
             configureSseRoutes(transferProgress)
         }.start(wait = false)
     }

@@ -1,132 +1,60 @@
 package ru.kryu.ferryfile.ui.home
 
-import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Color
-import android.net.ConnectivityManager
-import android.net.wifi.WifiManager
-import android.os.Build
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.MultiFormatWriter
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import ru.kryu.ferryfile.domain.repository.SettingsRepository
-import ru.kryu.ferryfile.server.KtorServer
-import ru.kryu.ferryfile.service.FileServerService
-import java.net.Inet4Address
+import ru.kryu.ferryfile.domain.model.ServerState
+import ru.kryu.ferryfile.domain.usecase.ObserveServerStateUseCase
+import ru.kryu.ferryfile.domain.usecase.ObserveSharedFoldersUseCase
+import ru.kryu.ferryfile.domain.usecase.RefreshServerStateUseCase
+import ru.kryu.ferryfile.domain.usecase.StartServerUseCase
+import ru.kryu.ferryfile.domain.usecase.StopServerUseCase
 import javax.inject.Inject
 
 data class HomeUiState(
     val isRunning: Boolean = false,
-    val port: Int = 8080,
-    val ipAddress: String = "",
-    val qrBitmap: Bitmap? = null
+    val isStarting: Boolean = false,
+    val url: String = "",
+    val pin: String = "",
+    val hasWifi: Boolean = true,
+    val hasSharedFolders: Boolean = true
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val settings: SettingsRepository,
-    private val ktorServer: KtorServer
+    observeServerState: ObserveServerStateUseCase,
+    observeSharedFolders: ObserveSharedFoldersUseCase,
+    private val startServer: StartServerUseCase,
+    private val stopServer: StopServerUseCase,
+    private val refreshServerState: RefreshServerStateUseCase
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(HomeUiState())
-    val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
-
-    init {
-        val isRunning = ktorServer.isRunning
-        val port = settings.port.value.value
-        _uiState.value = HomeUiState(isRunning = isRunning, port = port)
-        if (isRunning) {
-            viewModelScope.launch(Dispatchers.Default) {
-                val ip = getWifiIpAddress()
-                val qr = if (ip.isNotEmpty()) generateQr("http://$ip:$port") else null
-                _uiState.update { it.copy(ipAddress = ip, qrBitmap = qr) }
+    val uiState: StateFlow<HomeUiState> =
+        combine(observeServerState(), observeSharedFolders()) { server, folders ->
+            when (server) {
+                is ServerState.Stopped -> HomeUiState(hasSharedFolders = folders.isNotEmpty())
+                is ServerState.Starting -> HomeUiState(
+                    isStarting = true,
+                    hasSharedFolders = folders.isNotEmpty()
+                )
+                is ServerState.Running -> HomeUiState(
+                    isRunning = true,
+                    url = server.address?.asUrl().orEmpty(),
+                    pin = server.pin.digits,
+                    hasWifi = server.address != null,
+                    hasSharedFolders = folders.isNotEmpty()
+                )
             }
-        }
-    }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
-    fun startServer() {
-        val port = settings.port.value.value
-        ContextCompat.startForegroundService(
-            context,
-            Intent(context, FileServerService::class.java).apply { action = FileServerService.ACTION_START }
-        )
-        _uiState.update { it.copy(isRunning = true, port = port) }
-        viewModelScope.launch(Dispatchers.Default) {
-            val ip = getWifiIpAddress()
-            val qr = if (ip.isNotEmpty()) generateQr("http://$ip:$port") else null
-            _uiState.update { it.copy(ipAddress = ip, qrBitmap = qr) }
-        }
-    }
+    fun onStartClicked() = viewModelScope.launch { startServer() }
 
-    fun stopServer() {
-        context.stopService(Intent(context, FileServerService::class.java))
-        _uiState.update { it.copy(isRunning = false, ipAddress = "", qrBitmap = null) }
-    }
+    fun onStopClicked() = viewModelScope.launch { stopServer() }
 
-    fun refreshStatus() {
-        val isRunning = ktorServer.isRunning
-        val port = settings.port.value.value
-        _uiState.update { it.copy(isRunning = isRunning, port = port) }
-        if (isRunning) {
-            val current = _uiState.value
-            val needsRefresh = current.qrBitmap == null || current.port != port
-            if (needsRefresh) {
-                viewModelScope.launch(Dispatchers.Default) {
-                    val ip = getWifiIpAddress()
-                    val qr = if (ip.isNotEmpty()) generateQr("http://$ip:$port") else null
-                    _uiState.update { it.copy(ipAddress = ip, qrBitmap = qr) }
-                }
-            }
-        } else {
-            _uiState.update { it.copy(ipAddress = "", qrBitmap = null) }
-        }
-    }
-
-    private fun getWifiIpAddress(): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val network = cm.activeNetwork ?: return ""
-            val props = cm.getLinkProperties(network) ?: return ""
-            props.linkAddresses
-                .map { it.address }
-                .filterIsInstance<Inet4Address>()
-                .firstOrNull { !it.isLoopbackAddress }
-                ?.hostAddress ?: ""
-        } else {
-            @Suppress("DEPRECATION")
-            val wm = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            @Suppress("DEPRECATION")
-            val ip = wm.connectionInfo.ipAddress
-            if (ip == 0) return ""
-            String.format("%d.%d.%d.%d", ip and 0xff, ip shr 8 and 0xff, ip shr 16 and 0xff, ip shr 24 and 0xff)
-        }
-    }
-
-    private fun generateQr(content: String): Bitmap? {
-        return try {
-            val bitMatrix = MultiFormatWriter().encode(content, BarcodeFormat.QR_CODE, 512, 512)
-            val width = bitMatrix.width
-            val height = bitMatrix.height
-            val pixels = IntArray(width * height) { i ->
-                if (bitMatrix[i % width, i / width]) Color.BLACK else Color.WHITE
-            }
-            Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565).also { bmp ->
-                bmp.setPixels(pixels, 0, width, 0, 0, width, height)
-            }
-        } catch (e: Exception) {
-            null
-        }
-    }
+    fun refresh() = viewModelScope.launch { refreshServerState() }
 }

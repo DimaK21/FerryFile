@@ -1,8 +1,6 @@
 package ru.kryu.ferryfile.ui.home
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,7 +36,7 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
-        viewModel.refreshStatus()
+        viewModel.refresh()
     }
 
     Column(
@@ -70,9 +67,7 @@ fun HomeScreen(
 
         // Start/Stop button
         Button(
-            onClick = {
-                if (uiState.isRunning) viewModel.stopServer() else viewModel.startServer()
-            },
+            onClick = { if (uiState.isRunning) viewModel.onStopClicked() else viewModel.onStartClicked() },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = if (uiState.isRunning) "Stop Server" else "Start Server")
@@ -92,46 +87,25 @@ fun HomeScreen(
             ) {}
             Spacer(modifier = Modifier.size(8.dp))
             Text(
-                text = if (uiState.isRunning) "Running on port ${uiState.port}" else "Stopped",
+                text = when {
+                    uiState.isRunning -> "Running"
+                    uiState.isStarting -> "Starting..."
+                    else -> "Stopped"
+                },
                 style = MaterialTheme.typography.bodyMedium
             )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // QR code or connection info when running
         if (uiState.isRunning) {
-            val qrBitmap = uiState.qrBitmap
-            if (qrBitmap != null) {
-                Text(
-                    text = "Scan to connect",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Image(
-                    bitmap = qrBitmap.asImageBitmap(),
-                    contentDescription = "QR Code",
-                    modifier = Modifier.size(256.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "http://${uiState.ipAddress}:${uiState.port}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            } else {
-                if (uiState.ipAddress.isNotEmpty()) {
-                    Text(
-                        text = "Connect: http://${uiState.ipAddress}:${uiState.port}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                } else {
-                    Text(
-                        text = "No WiFi connection",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
+            Text(
+                text = if (uiState.hasWifi) uiState.url else "No Wi-Fi connection",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (uiState.pin.isNotEmpty()) {
+                Text(text = "PIN ${uiState.pin}", style = MaterialTheme.typography.titleMedium)
             }
         }
     }
