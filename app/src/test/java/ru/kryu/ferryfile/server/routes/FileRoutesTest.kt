@@ -1,5 +1,6 @@
 package ru.kryu.ferryfile.server.routes
 
+import android.content.res.AssetManager
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -21,6 +22,7 @@ class FileRoutesTest {
     private lateinit var transferProgress: TransferProgress
     private val downloadHandler = DownloadHandler()
     private val uploadHandler = UploadHandler()
+    private val assets: AssetManager = mock()
 
     @Before fun setUp() {
         sessionManager = SessionManager()
@@ -31,7 +33,7 @@ class FileRoutesTest {
         install(ContentNegotiation) { json() }
         application {
             configureAuthForTest(sessionManager)
-            configureFileRoutes(safFileProvider, transferProgress, downloadHandler, uploadHandler)
+            configureFileRoutes(safFileProvider, transferProgress, downloadHandler, uploadHandler, assets)
         }
         block()
     }
