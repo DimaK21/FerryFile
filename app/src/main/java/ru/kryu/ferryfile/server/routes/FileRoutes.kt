@@ -9,6 +9,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import ru.kryu.ferryfile.domain.model.FilePath
 import ru.kryu.ferryfile.domain.model.TransferEvent
@@ -204,6 +205,8 @@ fun Application.configureFileRoutes(
 
                     transferProgress.emitDone(transferId, files, written)
                     call.respond(UploadResponse(files, written))
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     transferProgress.emitError(transferId, "upload_failed", e.message ?: "Upload failed")
                     call.respond(HttpStatusCode.InternalServerError, ErrorResponse("upload_failed"))

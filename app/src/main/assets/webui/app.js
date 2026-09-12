@@ -251,14 +251,43 @@
         );
       })
       .then(function (res) {
-        if (res.status === 401) { window.location.href = '/login'; return; }
+        if (res.status === 401) { window.location.href = '/login'; return null; }
         if (!res.ok) throw new Error('Upload failed: ' + res.status);
+        // The `done` SSE event is the primary completion signal. But if SSE never
+        // opened (the 1.5s fallback in connectSSE let the POST through anyway) or the
+        // connection dropped mid-upload, this response is the only place we learn the
+        // upload actually finished — parse it so that case still completes the transfer.
+        return res.json().catch(function () { return null; });
+      })
+      .then(function (data) {
+        if (data) completeTransfer(transferId, data.files, data.bytes);
       })
       .catch(function (err) {
         showToast('Upload error: ' + err.message, 'error');
         hideProgress();
         closeSse();
       });
+  }
+
+  // Runs the shared "transfer finished" UI update exactly once per transfer, whichever
+  // of the two completion signals (SSE `done` event, HTTP response body) arrives first.
+  // Clearing currentTransferId makes the other signal's matching check fail afterwards.
+  function completeTransfer(transferId, files, bytes) {
+    if (transferId !== currentTransferId) return;
+    currentTransferId = null;
+
+    progressFill.style.width = '100%';
+    progressPct.textContent = '100%';
+
+    var msg = files + ' file' + (files !== 1 ? 's' : '') + ' transferred';
+    if (bytes != null) msg += ' (' + formatBytes(bytes) + ')';
+    showToast(msg, 'success');
+
+    setTimeout(function () {
+      hideProgress();
+      loadPath(currentPath);
+    }, 800);
+    closeSse();
   }
 
   // ── SSE progress ───────────────────────────────────────────────────────────
@@ -315,25 +344,16 @@
       sseSource.addEventListener('done', function (e) {
         var data = parseEvent(e);
         if (!data || data.transferId !== currentTransferId) return;
-
-        progressFill.style.width = '100%';
-        progressPct.textContent = '100%';
-
-        var msg = data.files + ' file' + (data.files !== 1 ? 's' : '') + ' transferred';
-        if (data.bytes != null) msg += ' (' + formatBytes(data.bytes) + ')';
-        showToast(msg, 'success');
-
-        setTimeout(function () {
-          hideProgress();
-          loadPath(currentPath);
-        }, 800);
-        closeSse();
+        completeTransfer(data.transferId, data.files, data.bytes);
       });
 
       sseSource.addEventListener('error', function (e) {
         var data = parseEvent(e);
-        if (data && data.transferId !== currentTransferId) return;
-        showToast((data && data.message) || 'Transfer error', 'error');
+        // EventSource dispatches its own connection-failure event under the same type
+        // name "error", distinguishable from a real server-sent transfer error only by
+        // the absence of parseable data — a connection blip is not a transfer failure.
+        if (!data || data.transferId !== currentTransferId) return;
+        showToast(data.message || 'Transfer error', 'error');
         hideProgress();
         closeSse();
       });
