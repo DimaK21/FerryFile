@@ -1,5 +1,7 @@
 package ru.kryu.ferryfile.domain.usecase
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import ru.kryu.ferryfile.domain.model.FilePath
 import ru.kryu.ferryfile.domain.repository.FileStorageRepository
 import java.io.InputStream
@@ -28,22 +30,26 @@ class SaveUploadUseCase @Inject constructor(
     ): Result {
         if (dir.isRoot) return Result.RootNotWritable
 
-        val created = storage.createFile(dir, safeName(fileName), mimeType) ?: return Result.Failed
-        val sink = storage.write(created) ?: return Result.Failed
+        // The largest blocking I/O in the app: run the create + copy on Dispatchers.IO so it
+        // never blocks the caller's (e.g. Ktor engine) thread for the duration of the upload.
+        return withContext(Dispatchers.IO) {
+            val created = storage.createFile(dir, safeName(fileName), mimeType) ?: return@withContext Result.Failed
+            val sink = storage.write(created) ?: return@withContext Result.Failed
 
-        var total = 0L
-        sink.use { out ->
-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-            while (true) {
-                val read = source.read(buffer)
-                if (read == -1) break
-                out.write(buffer, 0, read)
-                total += read
-                onBytesWritten(total)
+            var total = 0L
+            sink.use { out ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = source.read(buffer)
+                    if (read == -1) break
+                    out.write(buffer, 0, read)
+                    total += read
+                    onBytesWritten(total)
+                }
+                out.flush()
             }
-            out.flush()
+            Result.Saved(created, total)
         }
-        return Result.Saved(created, total)
     }
 
     /** Имя приходит от клиента, поэтому от него остаётся только последний сегмент. */

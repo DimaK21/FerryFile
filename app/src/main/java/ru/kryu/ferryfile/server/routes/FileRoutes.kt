@@ -102,19 +102,25 @@ fun Application.configureFileRoutes(
                     val totalSize = single.node.sizeBytes
                     val stream = downloadSelection.open(path)
                         ?: throw IOException("Cannot open ${path.raw}")
-                    val entry = DownloadHandler.Entry(fileName, totalSize) { stream }
-                    call.response.header(
-                        HttpHeaders.ContentDisposition,
-                        ContentDisposition.Attachment
-                            .withParameter(ContentDisposition.Parameters.FileName, "ferryfile.zip")
-                            .toString()
-                    )
-                    call.respondOutputStream(ContentType.Application.Zip) {
-                        zipStreamWriter.streamZip(listOf(entry), this) { bytes ->
-                            val pct = if (totalSize > 0) (bytes * 100 / totalSize).toInt() else 0
-                            transferProgress.tryEmit(TransferEvent.Progress(fileName, bytes, totalSize, pct, 0))
+                    // Opened eagerly because Entry.openStream is invoked synchronously inside
+                    // streamZip, outside any suspend context; .use guarantees the descriptor is
+                    // closed even if the header write, respondOutputStream, or the zip body
+                    // throws before streamZip's own `entry.openStream().use { }` gets to it.
+                    stream.use {
+                        val entry = DownloadHandler.Entry(fileName, totalSize) { stream }
+                        call.response.header(
+                            HttpHeaders.ContentDisposition,
+                            ContentDisposition.Attachment
+                                .withParameter(ContentDisposition.Parameters.FileName, "ferryfile.zip")
+                                .toString()
+                        )
+                        call.respondOutputStream(ContentType.Application.Zip) {
+                            zipStreamWriter.streamZip(listOf(entry), this) { bytes ->
+                                val pct = if (totalSize > 0) (bytes * 100 / totalSize).toInt() else 0
+                                transferProgress.tryEmit(TransferEvent.Progress(fileName, bytes, totalSize, pct, 0))
+                            }
+                            transferProgress.tryEmit(TransferEvent.Done(1, totalSize))
                         }
-                        transferProgress.tryEmit(TransferEvent.Done(1, totalSize))
                     }
                 } finally {
                     transferProgress.markIdle()

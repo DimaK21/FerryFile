@@ -7,6 +7,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import ru.kryu.ferryfile.domain.model.ServerAddress
 import ru.kryu.ferryfile.domain.model.ServerState
 import ru.kryu.ferryfile.domain.repository.AccessCodeRepository
@@ -19,7 +21,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ServerRepositoryImpl @Inject constructor(
+open class ServerRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
     private val network: NetworkRepository,
@@ -30,21 +32,37 @@ class ServerRepositoryImpl @Inject constructor(
     private val _state = MutableStateFlow<ServerState>(ServerState.Stopped)
     override val state: StateFlow<ServerState> = _state.asStateFlow()
 
-    override suspend fun start() {
-        if (server.isRunning) return refresh()
+    // start/stop/refresh all read-then-write `state` and `accessCodes` across a suspending
+    // network lookup; without serialization a refresh() landing inside that suspension could
+    // revoke the PIN a concurrent start() is about to publish (see ServerRepositoryImplTest).
+    private val mutex = Mutex()
+
+    override suspend fun start(): Unit = mutex.withLock {
+        if (server.isRunning) {
+            refreshLocked()
+            return@withLock
+        }
         _state.value = ServerState.Starting
-        val pin = accessCodes.issue()
-        ContextCompat.startForegroundService(context, intent(FileServerService.ACTION_START))
-        _state.value = ServerState.Running(address(), pin)
+        accessCodes.issue()
+        launchService(FileServerService.ACTION_START)
+        val resolvedAddress = address()
+        // Re-read the current PIN rather than trusting a value captured before the suspending
+        // address() lookup: nothing can revoke it while the mutex is held, but publishing
+        // whatever is actually current (and failing closed if it is somehow gone) is cheap
+        // insurance against ever showing a PIN that verify() would reject.
+        _state.value = accessCodes.current?.let { ServerState.Running(resolvedAddress, it) }
+            ?: ServerState.Stopped
     }
 
-    override suspend fun stop() {
-        context.startService(intent(FileServerService.ACTION_STOP))
+    override suspend fun stop(): Unit = mutex.withLock {
+        launchService(FileServerService.ACTION_STOP)
         accessCodes.revoke()
         _state.value = ServerState.Stopped
     }
 
-    override suspend fun refresh() {
+    override suspend fun refresh(): Unit = mutex.withLock { refreshLocked() }
+
+    private suspend fun refreshLocked() {
         _state.value = if (!server.isRunning) {
             accessCodes.revoke()
             ServerState.Stopped
@@ -56,6 +74,16 @@ class ServerRepositoryImpl @Inject constructor(
     private suspend fun address(): ServerAddress? =
         network.localAddress()?.let { ServerAddress(it, settings.port.value) }
 
-    private fun intent(action: String) =
-        Intent(context, FileServerService::class.java).apply { this.action = action }
+    /**
+     * Starts or stops the foreground service. Open + protected so tests can no-op the Android
+     * side effect while still exercising the real start/stop/refresh coordination above.
+     */
+    protected open fun launchService(action: String) {
+        val intent = Intent(context, FileServerService::class.java).apply { this.action = action }
+        if (action == FileServerService.ACTION_START) {
+            ContextCompat.startForegroundService(context, intent)
+        } else {
+            context.startService(intent)
+        }
+    }
 }
