@@ -20,6 +20,12 @@
   var currentPath = '/';
   var sseSource   = null;
   var toastTimer  = null;
+  var currentTransferId = null;
+  var isInitialLoad = true;
+
+  function newTransferId() {
+    return 'tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+  }
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
 
@@ -28,6 +34,7 @@
   var emptyEl           = document.getElementById('file-list-empty');
   var dropZoneEl        = document.getElementById('drop-zone');
   var uploadInput       = document.getElementById('upload-input');
+  var rootHintEl        = document.getElementById('root-hint');
   var logoutBtn         = document.getElementById('logout-btn');
   var toastEl           = document.getElementById('toast');
   var progressContainer = document.getElementById('progress-container');
@@ -169,9 +176,17 @@
 
   // ── API: load directory ────────────────────────────────────────────────────
 
+  function applyUploadVisibility(path) {
+    var atRoot = path === '/';
+    document.getElementById('upload-label').hidden = atRoot;
+    dropZoneEl.hidden = atRoot;
+    rootHintEl.hidden = !atRoot;
+  }
+
   function loadPath(path) {
     currentPath = path;
     buildBreadcrumb(path);
+    applyUploadVisibility(path);
 
     emptyEl.textContent = 'Loading…';
     emptyEl.style.display = '';
@@ -190,6 +205,14 @@
       .then(function (data) {
         if (!data) return;
         renderItems(data.items);
+
+        if (isInitialLoad) {
+          isInitialLoad = false;
+          if (path === '/' && data.items.length === 1 && data.items[0].isDirectory) {
+            loadPath(data.items[0].path);
+            return;
+          }
+        }
       })
       .catch(function (err) {
         emptyEl.textContent = 'Failed to load folder contents';
@@ -208,26 +231,33 @@
 
   function handleUpload(files, path) {
     if (!files || files.length === 0) return;
+    if (path === '/') {
+      showToast('Open a folder first — the home screen only lists shared folders', 'error');
+      return;
+    }
 
+    var transferId = newTransferId();
     var formData = new FormData();
     for (var i = 0; i < files.length; i++) {
       formData.append('file', files[i]);
     }
 
-    connectSSE();
-
-    fetch('/api/upload?path=' + encodeURIComponent(path), {
-      method: 'POST',
-      body: formData
-    })
+    connectSSE(transferId)
+      .then(function () {
+        return fetch(
+          '/api/upload?path=' + encodeURIComponent(path) +
+          '&transferId=' + encodeURIComponent(transferId),
+          { method: 'POST', body: formData }
+        );
+      })
       .then(function (res) {
-        if (res.status === 409) { showToast('Transfer already in progress', 'error'); return; }
         if (res.status === 401) { window.location.href = '/login'; return; }
         if (!res.ok) throw new Error('Upload failed: ' + res.status);
       })
       .catch(function (err) {
         showToast('Upload error: ' + err.message, 'error');
         hideProgress();
+        closeSse();
       });
   }
 
@@ -245,67 +275,84 @@
     progressDetails.textContent = '';
   }
 
-  function connectSSE() {
-    if (sseSource) { sseSource.close(); sseSource = null; }
+  function connectSSE(transferId) {
+    closeSse();
+    currentTransferId = transferId;
     showProgress();
 
-    sseSource = new EventSource('/api/progress');
-
-    sseSource.addEventListener('progress', function (e) {
-      var data;
-      try { data = JSON.parse(e.data); } catch (ex) { return; }
-
-      var pct = Math.min(100, Math.max(0, data.pct || 0));
-      progressFill.style.width = pct + '%';
-      progressPct.textContent = pct + '%';
-      if (data.file) progressFilename.textContent = data.file;  // safe: textContent
-
-      var details = '';
-      if (data.bytes != null && data.total != null) {
-        details = formatBytes(data.bytes) + ' / ' + formatBytes(data.total);
+    return new Promise(function (resolve) {
+      var settled = false;
+      function ready() {
+        if (settled) return;
+        settled = true;
+        resolve();
       }
-      var eta = Number(data.eta);
-      if (isFinite(eta)) details += (details ? '  \xB7  ' : '') + 'ETA ' + Math.round(eta) + 's';
-      progressDetails.textContent = details;                     // safe: textContent
-    });
 
-    sseSource.addEventListener('done', function (e) {
-      var data;
-      try { data = JSON.parse(e.data); } catch (ex) { data = {}; }
+      sseSource = new EventSource('/api/progress');
+      sseSource.onopen = ready;
+      // Страховка: если браузер не сообщит об открытии, отправляем запрос всё равно.
+      setTimeout(ready, 1500);
 
-      progressFill.style.width = '100%';
-      progressPct.textContent = '100%';
+      sseSource.addEventListener('progress', function (e) {
+        var data = parseEvent(e);
+        if (!data || data.transferId !== currentTransferId) return;
 
-      var msg = 'Transfer complete';
-      if (data.files != null) {
-        msg = data.files + ' file' + (data.files !== 1 ? 's' : '') + ' transferred';
+        var pct = Math.min(100, Math.max(0, data.pct || 0));
+        progressFill.style.width = pct + '%';
+        progressPct.textContent = pct + '%';
+        if (data.file) progressFilename.textContent = data.file;
+
+        var details = '';
+        if (data.bytes != null && data.total != null && data.total > 0) {
+          details = formatBytes(data.bytes) + ' / ' + formatBytes(data.total);
+        }
+        if (typeof data.eta === 'number' && data.eta >= 0) {
+          details += (details ? '  \xB7  ' : '') + 'ETA ' + data.eta + 's';
+        }
+        progressDetails.textContent = details;
+      });
+
+      sseSource.addEventListener('done', function (e) {
+        var data = parseEvent(e);
+        if (!data || data.transferId !== currentTransferId) return;
+
+        progressFill.style.width = '100%';
+        progressPct.textContent = '100%';
+
+        var msg = data.files + ' file' + (data.files !== 1 ? 's' : '') + ' transferred';
         if (data.bytes != null) msg += ' (' + formatBytes(data.bytes) + ')';
-      }
-      showToast(msg, 'success');
+        showToast(msg, 'success');
 
-      setTimeout(function () {
+        setTimeout(function () {
+          hideProgress();
+          loadPath(currentPath);
+        }, 800);
+        closeSse();
+      });
+
+      sseSource.addEventListener('error', function (e) {
+        var data = parseEvent(e);
+        if (data && data.transferId !== currentTransferId) return;
+        showToast((data && data.message) || 'Transfer error', 'error');
         hideProgress();
-        loadPath(currentPath);
-      }, 800);
+        closeSse();
+      });
 
-      closeSse();
+      sseSource.onerror = function () {
+        if (sseSource && sseSource.readyState === EventSource.CLOSED) {
+          hideProgress();
+          sseSource = null;
+        }
+      };
     });
+  }
 
-    sseSource.addEventListener('error', function (e) {
-      var data;
-      try { data = JSON.parse(e.data); } catch (ex) { data = {}; }
-      showToast(data.message || 'Transfer error', 'error');
-      hideProgress();
-      closeSse();
-    });
-
-    sseSource.onerror = function () {
-      if (sseSource && sseSource.readyState === EventSource.CLOSED) {
-        showToast('Connection to server lost', 'error');
-        hideProgress();
-        sseSource = null;
-      }
-    };
+  function parseEvent(e) {
+    try {
+      return JSON.parse(e.data);
+    } catch (ex) {
+      return null;
+    }
   }
 
   function closeSse() {

@@ -8,13 +8,14 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.serialization.Serializable
 import ru.kryu.ferryfile.domain.model.FilePath
+import ru.kryu.ferryfile.domain.model.TransferEvent
 import ru.kryu.ferryfile.domain.usecase.DownloadSelectionUseCase
 import ru.kryu.ferryfile.domain.usecase.ListDirectoryUseCase
 import ru.kryu.ferryfile.domain.usecase.SaveUploadUseCase
 import ru.kryu.ferryfile.server.transfer.DownloadHandler
-import ru.kryu.ferryfile.server.transfer.TransferEvent
 import ru.kryu.ferryfile.server.transfer.TransferProgress
 import java.io.IOException
 
@@ -31,7 +32,13 @@ data class FileItemDto(
 )
 
 @Serializable
+data class UploadResponse(val files: Int, val bytes: Long)
+
+@Serializable
 data class ErrorResponse(val error: String)
+
+private const val BINARY_MIME = "application/octet-stream"
+private const val PROGRESS_INTERVAL_MS = 200L
 
 fun Application.configureFileRoutes(
     listDirectory: ListDirectoryUseCase,
@@ -78,13 +85,24 @@ fun Application.configureFileRoutes(
             }
 
             get("/api/list") {
-                val path = FilePath.parse(call.request.queryParameters["path"])
-                    ?: run { call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_path")); return@get }
+                val path = FilePath.parse(call.request.queryParameters["path"] ?: "/")
+                    ?: run {
+                        call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_path"))
+                        return@get
+                    }
                 val items = listDirectory(path)
-                    ?: run { call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")); return@get }
-                call.respond(FileListResponse(path.raw, items.map {
-                    FileItemDto(it.name, it.sizeBytes, it.lastModified, it.isDirectory, it.path.raw)
-                }))
+                    ?: run {
+                        call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
+                        return@get
+                    }
+                call.respond(
+                    FileListResponse(
+                        path = path.raw,
+                        items = items.map {
+                            FileItemDto(it.name, it.sizeBytes, it.lastModified, it.isDirectory, it.path.raw)
+                        }
+                    )
+                )
             }
 
             get("/api/download") {
@@ -117,9 +135,9 @@ fun Application.configureFileRoutes(
                         call.respondOutputStream(ContentType.Application.Zip) {
                             zipStreamWriter.streamZip(listOf(entry), this) { bytes ->
                                 val pct = if (totalSize > 0) (bytes * 100 / totalSize).toInt() else 0
-                                transferProgress.tryEmit(TransferEvent.Progress(fileName, bytes, totalSize, pct, 0))
+                                transferProgress.tryEmit(TransferEvent.Progress("", fileName, bytes, totalSize, pct, 0))
                             }
-                            transferProgress.tryEmit(TransferEvent.Done(1, totalSize))
+                            transferProgress.tryEmit(TransferEvent.Done("", 1, totalSize))
                         }
                     }
                 } finally {
@@ -128,34 +146,54 @@ fun Application.configureFileRoutes(
             }
 
             post("/api/upload") {
-                val dirPath = FilePath.parse(call.request.queryParameters["path"])
-                    ?: run { call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@post }
-                if (!transferProgress.tryMarkBusy()) {
-                    call.respond(HttpStatusCode.Conflict, "Transfer already in progress, try again shortly")
+                val dir = FilePath.parse(call.request.queryParameters["path"])
+                if (dir == null) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_path"))
                     return@post
                 }
-                var filesWritten = 0
-                var totalBytes = 0L
+                if (dir.isRoot) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("root_not_writable"))
+                    return@post
+                }
+
+                val transferId = call.request.queryParameters["transferId"].orEmpty()
+                val totalBytes = call.request.header(HttpHeaders.ContentLength)?.toLongOrNull() ?: -1L
+                val startedAt = System.currentTimeMillis()
+                var written = 0L
+                var files = 0
+                var lastEmitAt = 0L
+
                 try {
                     val multipart = call.receiveMultipart()
                     var part = multipart.readPart()
                     while (part != null) {
                         try {
                             if (part is PartData.FileItem) {
-                                val fileName = part.originalFileName ?: "upload_$filesWritten"
-                                val mimeType = part.contentType?.toString() ?: "application/octet-stream"
-                                var fileBytes = 0L
-                                val result = part.streamProvider().use { input ->
-                                    saveUpload(dirPath, fileName, mimeType, input) { cumulative ->
-                                        fileBytes = cumulative
-                                        transferProgress.tryEmit(
-                                            TransferEvent.Progress(fileName, totalBytes + cumulative, -1L, 0, 0)
+                                val fileName = part.originalFileName.orEmpty()
+                                val mimeType = part.contentType?.toString() ?: BINARY_MIME
+                                val alreadyWritten = written
+                                val source = part.provider().toInputStream()
+
+                                val result = saveUpload(dir, fileName, mimeType, source) { chunkBytes ->
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastEmitAt >= PROGRESS_INTERVAL_MS) {
+                                        lastEmitAt = now
+                                        transferProgress.emitProgress(
+                                            transferId, fileName,
+                                            alreadyWritten + chunkBytes, totalBytes, startedAt
                                         )
                                     }
                                 }
-                                if (result is SaveUploadUseCase.Result.Saved) {
-                                    totalBytes += fileBytes
-                                    filesWritten++
+
+                                when (result) {
+                                    is SaveUploadUseCase.Result.Saved -> {
+                                        written = alreadyWritten + result.bytesWritten
+                                        files++
+                                    }
+
+                                    SaveUploadUseCase.Result.RootNotWritable,
+                                    SaveUploadUseCase.Result.Failed ->
+                                        throw IOException("Cannot store $fileName")
                                 }
                             }
                         } finally {
@@ -163,9 +201,12 @@ fun Application.configureFileRoutes(
                         }
                         part = multipart.readPart()
                     }
-                    call.respond(HttpStatusCode.OK, mapOf("files" to filesWritten, "bytes" to totalBytes))
-                } finally {
-                    transferProgress.markIdle()
+
+                    transferProgress.emitDone(transferId, files, written)
+                    call.respond(UploadResponse(files, written))
+                } catch (e: Exception) {
+                    transferProgress.emitError(transferId, "upload_failed", e.message ?: "Upload failed")
+                    call.respond(HttpStatusCode.InternalServerError, ErrorResponse("upload_failed"))
                 }
             }
         }

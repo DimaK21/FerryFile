@@ -6,6 +6,11 @@
   padding: 0;
 }
 
+/* Author rules like .btn{display:inline-flex} otherwise outrank the UA [hidden] default. */
+[hidden] {
+  display: none !important;
+}
+
 :root {
   --bg: #121212;
   --surface: #1e1e1e;
@@ -250,6 +255,12 @@ body {
   gap: 10px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+}
+
+.root-hint {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 16px;
 }
 
 /* ── File list ── */
