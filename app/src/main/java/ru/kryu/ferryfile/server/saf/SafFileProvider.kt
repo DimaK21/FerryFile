@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import dagger.hilt.android.qualifiers.ApplicationContext
-import ru.kryu.ferryfile.data.PreferencesRepository
+import ru.kryu.ferryfile.domain.repository.SettingsRepository
 import java.io.InputStream
 import java.io.OutputStream
 import javax.inject.Inject
@@ -13,7 +13,7 @@ import javax.inject.Singleton
 @Singleton
 class SafFileProvider @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val prefs: PreferencesRepository
+    private val settings: SettingsRepository
 ) {
     data class FileInfo(
         val name: String,
@@ -24,7 +24,7 @@ class SafFileProvider @Inject constructor(
     )
 
     private fun grantedRoots(): List<DocumentFile> =
-        prefs.safUris.mapNotNull { DocumentFile.fromTreeUri(context, Uri.parse(it)) }
+        settings.sharedFolders.value.map { it.uri }.mapNotNull { DocumentFile.fromTreeUri(context, Uri.parse(it)) }
 
     fun listRoot(): List<FileInfo> = grantedRoots().mapIndexed { i, root ->
         FileInfo(root.name ?: "Folder $i", 0L, root.lastModified(), true, "$i")

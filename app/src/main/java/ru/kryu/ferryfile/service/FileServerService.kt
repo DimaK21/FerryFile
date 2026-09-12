@@ -10,7 +10,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
 import ru.kryu.ferryfile.R
-import ru.kryu.ferryfile.data.PreferencesRepository
+import ru.kryu.ferryfile.domain.repository.SettingsRepository
 import ru.kryu.ferryfile.server.KtorServer
 import javax.inject.Inject
 
@@ -21,7 +21,7 @@ class FileServerService : Service() {
     lateinit var ktorServer: KtorServer
 
     @Inject
-    lateinit var prefs: PreferencesRepository
+    lateinit var settings: SettingsRepository
 
     companion object {
         const val ACTION_START = "ru.kryu.ferryfile.START_SERVER"
@@ -39,7 +39,7 @@ class FileServerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> if (!ktorServer.isRunning) {
-                val port = prefs.port
+                val port = settings.port.value.value
                 startForeground(
                     NOTIFICATION_ID,
                     buildNotification(port),

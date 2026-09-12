@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import ru.kryu.ferryfile.data.PreferencesRepository
+import ru.kryu.ferryfile.domain.repository.SettingsRepository
 import ru.kryu.ferryfile.server.KtorServer
 import ru.kryu.ferryfile.service.FileServerService
 import java.net.Inet4Address
@@ -30,14 +30,13 @@ data class HomeUiState(
     val isRunning: Boolean = false,
     val port: Int = 8080,
     val ipAddress: String = "",
-    val qrBitmap: Bitmap? = null,
-    val hasPassword: Boolean = false
+    val qrBitmap: Bitmap? = null
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val prefs: PreferencesRepository,
+    private val settings: SettingsRepository,
     private val ktorServer: KtorServer
 ) : ViewModel() {
 
@@ -46,9 +45,8 @@ class HomeViewModel @Inject constructor(
 
     init {
         val isRunning = ktorServer.isRunning
-        val port = prefs.port
-        val hasPassword = prefs.passwordHash.isNotEmpty()
-        _uiState.value = HomeUiState(isRunning = isRunning, port = port, hasPassword = hasPassword)
+        val port = settings.port.value.value
+        _uiState.value = HomeUiState(isRunning = isRunning, port = port)
         if (isRunning) {
             viewModelScope.launch(Dispatchers.Default) {
                 val ip = getWifiIpAddress()
@@ -59,7 +57,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun startServer() {
-        val port = prefs.port
+        val port = settings.port.value.value
         ContextCompat.startForegroundService(
             context,
             Intent(context, FileServerService::class.java).apply { action = FileServerService.ACTION_START }
@@ -79,9 +77,8 @@ class HomeViewModel @Inject constructor(
 
     fun refreshStatus() {
         val isRunning = ktorServer.isRunning
-        val hasPassword = prefs.passwordHash.isNotEmpty()
-        val port = prefs.port
-        _uiState.update { it.copy(isRunning = isRunning, port = port, hasPassword = hasPassword) }
+        val port = settings.port.value.value
+        _uiState.update { it.copy(isRunning = isRunning, port = port) }
         if (isRunning) {
             val current = _uiState.value
             val needsRefresh = current.qrBitmap == null || current.port != port

@@ -27,10 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -44,13 +42,12 @@ fun SettingsScreen(
 
     var portText by remember(uiState.port) { mutableStateOf(uiState.port.toString()) }
     var isPortError by remember { mutableStateOf(false) }
-    var passwordField by remember { mutableStateOf("") }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         if (uri != null) {
-            viewModel.addSafUri(uri)
+            viewModel.addSafUri(uri.toString())
         }
     }
 
@@ -111,52 +108,6 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Password section
-        Text(
-            text = "Password",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Status text
-        Text(
-            text = if (uiState.hasPassword) "Password set" else "No password set",
-            color = if (uiState.hasPassword) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = passwordField,
-            onValueChange = { passwordField = it },
-            label = { Text("New password") },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = {
-                    viewModel.setPassword(passwordField)
-                    passwordField = ""
-                },
-                enabled = passwordField.isNotBlank()
-            ) {
-                Text("Set Password")
-            }
-            if (uiState.hasPassword) {
-                TextButton(onClick = { viewModel.clearPassword() }) {
-                    Text("Clear Password", color = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
         // Dark Theme section
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -184,15 +135,14 @@ fun SettingsScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        if (uiState.safUris.isEmpty()) {
+        if (uiState.sharedFolders.isEmpty()) {
             Text(
                 text = "No folders added",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            uiState.safUris.forEach { uriString ->
-                val displayName = Uri.decode(Uri.parse(uriString).lastPathSegment ?: uriString)
+            uiState.sharedFolders.forEach { folder ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -201,11 +151,11 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = displayName,
+                        text = folder.displayName,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { viewModel.removeSafUri(uriString) }) {
+                    TextButton(onClick = { viewModel.removeSafUri(folder.uri) }) {
                         Text("Remove", color = MaterialTheme.colorScheme.error)
                     }
                 }

@@ -1,6 +1,7 @@
 package ru.kryu.ferryfile.server
 
 import android.content.Context
+import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -8,7 +9,6 @@ import io.ktor.server.cio.*
 import io.ktor.server.engine.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.sse.*
-import ru.kryu.ferryfile.data.PreferencesRepository
 import ru.kryu.ferryfile.server.auth.PasswordHasher
 import ru.kryu.ferryfile.server.auth.SessionManager
 import ru.kryu.ferryfile.server.routes.configureAuthRoutes
@@ -30,16 +30,19 @@ class KtorServer @Inject constructor(
     private val transferProgress: TransferProgress,
     private val downloadHandler: DownloadHandler,
     private val uploadHandler: UploadHandler,
-    private val prefs: PreferencesRepository
+    private val prefs: SharedPreferences
 ) {
     @Volatile private var engine: EmbeddedServer<*, *>? = null
+
+    // до Задачи 8 пароль читается напрямую из SharedPreferences
+    private val passwordHash: String get() = prefs.getString("password_hash", "") ?: ""
 
     fun start(port: Int) {
         sessionManager.reset()
         engine = embeddedServer(CIO, port = port, host = "0.0.0.0", watchPaths = emptyList()) {
             install(ContentNegotiation) { json() }
             install(SSE)
-            configureAuthRoutes(sessionManager, { prefs.passwordHash }, passwordHasher)
+            configureAuthRoutes(sessionManager, { passwordHash }, passwordHasher)
             configureFileRoutes(safFileProvider, transferProgress, downloadHandler, uploadHandler, context.assets)
             configureSseRoutes(transferProgress)
         }.start(wait = false)

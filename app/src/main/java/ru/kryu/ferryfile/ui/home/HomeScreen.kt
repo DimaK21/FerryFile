@@ -15,8 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,29 +68,11 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Password warning card
-        if (!uiState.hasPassword) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Text(
-                    text = "Set a password in Settings before starting the server",
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
         // Start/Stop button
         Button(
             onClick = {
                 if (uiState.isRunning) viewModel.stopServer() else viewModel.startServer()
             },
-            enabled = uiState.hasPassword,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = if (uiState.isRunning) "Stop Server" else "Start Server")
