@@ -4,33 +4,19 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import ru.kryu.ferryfile.domain.model.TransferEvent
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Шина событий передачи. Загрузка (upload) больше не использует глобальную блокировку:
- * параллельные передачи различаются по [TransferEvent.transferId], который генерирует клиент.
- *
- * `isBusy`/`tryMarkBusy`/`markIdle`/`tryEmit` остаются только ради `/api/download`
- * (см. FileRoutes.kt), который их ещё использует — Задача 7 их уберёт вместе с переписыванием
- * маршрута скачивания.
+ * Шина событий передачи. Загрузка (upload) не использует глобальную блокировку: параллельные
+ * передачи различаются по [TransferEvent.transferId], который генерирует клиент. Скачивание
+ * (download) не эмитит никаких событий вовсе — прогресс показывает сам браузер.
  */
 @Singleton
 class TransferProgress @Inject constructor() {
 
     private val _events = MutableSharedFlow<TransferEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<TransferEvent> = _events.asSharedFlow()
-
-    private val _isBusy = AtomicBoolean(false)
-    val isBusy: Boolean get() = _isBusy.get()
-
-    fun tryEmit(event: TransferEvent) {
-        _events.tryEmit(event)
-    }
-
-    fun tryMarkBusy(): Boolean = _isBusy.compareAndSet(false, true)
-    fun markIdle() = _isBusy.set(false)
 
     fun emitProgress(
         transferId: String,

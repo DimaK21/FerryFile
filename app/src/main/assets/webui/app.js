@@ -155,7 +155,7 @@
       if (item.isDirectory) {
         nameBtn.addEventListener('click', function () { loadPath(item.path); });
       } else {
-        nameBtn.addEventListener('click', function () { downloadFile(item.path); });
+        nameBtn.addEventListener('click', function () { downloadPaths([item.path]); });
       }
 
       // Meta
@@ -223,8 +223,12 @@
 
   // ── API: download file ─────────────────────────────────────────────────────
 
-  function downloadFile(path) {
-    window.location.href = '/api/download?path=' + encodeURIComponent(path);
+  function downloadPaths(paths) {
+    if (!paths || paths.length === 0) return;
+    var query = paths.map(function (p) {
+      return 'path=' + encodeURIComponent(p);
+    }).join('&');
+    window.location.href = '/api/download?' + query;
   }
 
   // ── API: upload files ──────────────────────────────────────────────────────

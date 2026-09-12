@@ -4,6 +4,7 @@ import android.content.res.AssetManager
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.plugins.contentnegotiation.*
@@ -26,8 +27,8 @@ import ru.kryu.ferryfile.domain.usecase.DownloadSelectionUseCase
 import ru.kryu.ferryfile.domain.usecase.ListDirectoryUseCase
 import ru.kryu.ferryfile.domain.usecase.SaveUploadUseCase
 import ru.kryu.ferryfile.server.auth.SessionManager
-import ru.kryu.ferryfile.server.transfer.DownloadHandler
 import ru.kryu.ferryfile.server.transfer.TransferProgress
+import ru.kryu.ferryfile.server.transfer.ZipStreamWriter
 
 class FileRoutesTest {
 
@@ -51,7 +52,7 @@ class FileRoutesTest {
                 DownloadSelectionUseCase(storage),
                 SaveUploadUseCase(storage),
                 transferProgress,
-                DownloadHandler(),
+                ZipStreamWriter(),
                 assets
             )
         }
@@ -75,6 +76,83 @@ class FileRoutesTest {
         val token = sessionManager.createSession()
         val res = client.get("/api/list?path=0%2F..%2Fetc") { cookie("FERRYFILE_SESSION", token) }
         assertEquals(HttpStatusCode.BadRequest, res.status)
+    }
+
+    @Test fun `single file is streamed as is, not zipped`() = withApp {
+        storage.addDirectory("0")
+        storage.addFile("0/report.pdf", "pdf-bytes", "application/pdf")
+        val token = sessionManager.createSession()
+
+        val res = client.get("/api/download?path=0%2Freport.pdf") {
+            cookie("FERRYFILE_SESSION", token)
+        }
+
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals("pdf-bytes", res.bodyAsText())
+        assertEquals("application/pdf", res.contentType()?.withoutParameters()?.toString())
+        val disposition = res.headers[HttpHeaders.ContentDisposition]!!
+        assertTrue(disposition.contains("""filename="report.pdf""""))
+        assertFalse(disposition.contains(".zip"))
+    }
+
+    @Test fun `folder is streamed as a zip named after the folder`() = withApp {
+        storage.addDirectory("0")
+        storage.addDirectory("0/docs")
+        storage.addFile("0/docs/a.txt", "alpha")
+        val token = sessionManager.createSession()
+
+        val res = client.get("/api/download?path=0%2Fdocs") {
+            cookie("FERRYFILE_SESSION", token)
+        }
+
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertTrue(res.headers[HttpHeaders.ContentDisposition]!!.contains("""filename="docs.zip""""))
+        assertEquals(listOf("docs/a.txt"), zipEntryNames(res.readRawBytes()))
+    }
+
+    @Test fun `multiple paths are packed into one selection archive`() = withApp {
+        storage.addDirectory("0")
+        storage.addFile("0/a.txt", "alpha")
+        storage.addFile("0/b.txt", "beta")
+        val token = sessionManager.createSession()
+
+        val res = client.get("/api/download?path=0%2Fa.txt&path=0%2Fb.txt") {
+            cookie("FERRYFILE_SESSION", token)
+        }
+
+        assertTrue(res.headers[HttpHeaders.ContentDisposition]!!.contains("ferryfile-selection.zip"))
+        assertEquals(listOf("a.txt", "b.txt"), zipEntryNames(res.readRawBytes()).sorted())
+    }
+
+    @Test fun `unknown path returns 404`() = withApp {
+        storage.addDirectory("0")
+        val token = sessionManager.createSession()
+
+        val res = client.get("/api/download?path=0%2Fghost") {
+            cookie("FERRYFILE_SESSION", token)
+        }
+
+        assertEquals(HttpStatusCode.NotFound, res.status)
+    }
+
+    @Test fun `download without a path is rejected`() = withApp {
+        val token = sessionManager.createSession()
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            client.get("/api/download") { cookie("FERRYFILE_SESSION", token) }.status
+        )
+    }
+
+    private fun zipEntryNames(bytes: ByteArray): List<String> {
+        val names = mutableListOf<String>()
+        java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                names += entry.name
+                entry = zip.nextEntry
+            }
+        }
+        return names
     }
 
     private fun multipart(fileName: String, content: String) = MultiPartFormDataContent(

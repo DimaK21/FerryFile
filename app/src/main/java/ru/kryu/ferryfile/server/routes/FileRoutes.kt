@@ -10,15 +10,17 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import ru.kryu.ferryfile.domain.model.FilePath
-import ru.kryu.ferryfile.domain.model.TransferEvent
 import ru.kryu.ferryfile.domain.usecase.DownloadSelectionUseCase
 import ru.kryu.ferryfile.domain.usecase.ListDirectoryUseCase
 import ru.kryu.ferryfile.domain.usecase.SaveUploadUseCase
-import ru.kryu.ferryfile.server.transfer.DownloadHandler
+import ru.kryu.ferryfile.server.transfer.ZipStreamWriter
 import ru.kryu.ferryfile.server.transfer.TransferProgress
 import java.io.IOException
+import java.net.URLEncoder
 
 @Serializable
 data class FileListResponse(val path: String, val items: List<FileItemDto>)
@@ -46,7 +48,7 @@ fun Application.configureFileRoutes(
     downloadSelection: DownloadSelectionUseCase,
     saveUpload: SaveUploadUseCase,
     transferProgress: TransferProgress,
-    zipStreamWriter: DownloadHandler,
+    zipStreamWriter: ZipStreamWriter,
     assets: AssetManager
 ) {
     routing {
@@ -107,42 +109,56 @@ fun Application.configureFileRoutes(
             }
 
             get("/api/download") {
-                val path = FilePath.parse(call.request.queryParameters["path"])
-                    ?: run { call.respond(HttpStatusCode.BadRequest, "Invalid path"); return@get }
-                if (!transferProgress.tryMarkBusy()) {
-                    call.respond(HttpStatusCode.Conflict, "Transfer already in progress, try again shortly")
+                val rawPaths = call.request.queryParameters.getAll("path").orEmpty()
+                val paths = rawPaths.mapNotNull { FilePath.parse(it) }
+                if (rawPaths.isEmpty() || paths.size != rawPaths.size) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_path"))
                     return@get
                 }
-                try {
-                    val selection = downloadSelection.resolve(listOf(path))
-                    val single = selection as? DownloadSelectionUseCase.Selection.SingleFile
-                        ?: run { call.respond(HttpStatusCode.NotFound); return@get }
-                    val fileName = single.node.name
-                    val totalSize = single.node.sizeBytes
-                    val stream = downloadSelection.open(path)
-                        ?: throw IOException("Cannot open ${path.raw}")
-                    // Opened eagerly because Entry.openStream is invoked synchronously inside
-                    // streamZip, outside any suspend context; .use guarantees the descriptor is
-                    // closed even if the header write, respondOutputStream, or the zip body
-                    // throws before streamZip's own `entry.openStream().use { }` gets to it.
-                    stream.use {
-                        val entry = DownloadHandler.Entry(fileName, totalSize) { stream }
-                        call.response.header(
-                            HttpHeaders.ContentDisposition,
-                            ContentDisposition.Attachment
-                                .withParameter(ContentDisposition.Parameters.FileName, "ferryfile.zip")
-                                .toString()
-                        )
-                        call.respondOutputStream(ContentType.Application.Zip) {
-                            zipStreamWriter.streamZip(listOf(entry), this) { bytes ->
-                                val pct = if (totalSize > 0) (bytes * 100 / totalSize).toInt() else 0
-                                transferProgress.tryEmit(TransferEvent.Progress("", fileName, bytes, totalSize, pct, 0))
+
+                when (val selection = downloadSelection.resolve(paths)) {
+                    DownloadSelectionUseCase.Selection.NotFound ->
+                        call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
+
+                    is DownloadSelectionUseCase.Selection.SingleFile -> {
+                        val node = selection.node
+                        val stream = downloadSelection.open(node.path)
+                        if (stream == null) {
+                            call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
+                            return@get
+                        }
+                        // Opened eagerly, before headers are written, so it must stay guaranteed
+                        // to close even if the header write, respondOutputStream itself, or the
+                        // body throws before ever invoking its lambda (e.g. the client already
+                        // disconnected) — spanning the whole path in `stream.use` covers all of
+                        // that, unlike closing only inside the body lambda.
+                        stream.use { source ->
+                            call.response.header(HttpHeaders.ContentDisposition, attachmentHeader(node.name))
+                            if (node.sizeBytes > 0) {
+                                call.response.header(HttpHeaders.ContentLength, node.sizeBytes.toString())
                             }
-                            transferProgress.tryEmit(TransferEvent.Done("", 1, totalSize))
+                            val contentType = runCatching { ContentType.parse(node.mimeType) }
+                                .getOrDefault(ContentType.Application.OctetStream)
+                            call.respondOutputStream(contentType) {
+                                withContext(Dispatchers.IO) { source.copyTo(this@respondOutputStream) }
+                            }
                         }
                     }
-                } finally {
-                    transferProgress.markIdle()
+
+                    is DownloadSelectionUseCase.Selection.Archive -> {
+                        call.response.header(
+                            HttpHeaders.ContentDisposition,
+                            attachmentHeader(selection.fileName)
+                        )
+                        call.respondOutputStream(ContentType.Application.Zip) {
+                            val entries = selection.entries.map { source ->
+                                ZipStreamWriter.Entry(source.entryName) { downloadSelection.open(source.path) }
+                            }
+                            withContext(Dispatchers.IO) {
+                                zipStreamWriter.write(entries, this@respondOutputStream)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -218,3 +234,15 @@ fun Application.configureFileRoutes(
 
 private fun loadAsset(assets: AssetManager, path: String): String? =
     runCatching { assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()
+
+/**
+ * `Content-Disposition` с ASCII-запасным именем и RFC 5987-формой для кириллицы и прочего
+ * не-ASCII. Без `filename*` браузер сохранит файл под искажённым именем.
+ */
+internal fun attachmentHeader(fileName: String): String {
+    val asciiFallback = fileName.map { char ->
+        if (char.code in 32..126 && char != '"' && char != '\\') char else '_'
+    }.joinToString("")
+    val encoded = URLEncoder.encode(fileName, Charsets.UTF_8.name()).replace("+", "%20")
+    return "attachment; filename=\"$asciiFallback\"; filename*=UTF-8''$encoded"
+}

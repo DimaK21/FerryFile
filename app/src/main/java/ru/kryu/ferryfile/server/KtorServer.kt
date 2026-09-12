@@ -17,8 +17,8 @@ import ru.kryu.ferryfile.server.auth.SessionManager
 import ru.kryu.ferryfile.server.routes.configureAuthRoutes
 import ru.kryu.ferryfile.server.routes.configureFileRoutes
 import ru.kryu.ferryfile.server.routes.configureSseRoutes
-import ru.kryu.ferryfile.server.transfer.DownloadHandler
 import ru.kryu.ferryfile.server.transfer.TransferProgress
+import ru.kryu.ferryfile.server.transfer.ZipStreamWriter
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,7 +31,7 @@ class KtorServer @Inject constructor(
     private val downloadSelection: DownloadSelectionUseCase,
     private val saveUpload: SaveUploadUseCase,
     private val transferProgress: TransferProgress,
-    private val downloadHandler: DownloadHandler,
+    private val zipStreamWriter: ZipStreamWriter,
     private val prefs: SharedPreferences
 ) {
     @Volatile private var engine: EmbeddedServer<*, *>? = null
@@ -50,7 +50,7 @@ class KtorServer @Inject constructor(
                 downloadSelection,
                 saveUpload,
                 transferProgress,
-                downloadHandler,
+                zipStreamWriter,
                 context.assets
             )
             configureSseRoutes(transferProgress)
