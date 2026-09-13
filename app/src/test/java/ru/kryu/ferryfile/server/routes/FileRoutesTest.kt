@@ -37,10 +37,20 @@ class FileRoutesTest {
     private lateinit var storage: FakeFileStorageRepository
     private val assets: AssetManager = mock()
 
+    /**
+     * Captures what the upload route's `logError` seam would otherwise send to
+     * `android.util.Log` — which is a stub that throws unless mocked under the local JVM unit
+     * test runtime. Passing this instead of relying on `configureFileRoutes`'s default keeps
+     * this whole suite independent of that framework stub (no `testOptions.unitTests` flag
+     * needed) and, incidentally, lets a test assert a failure was actually logged.
+     */
+    private val loggedErrors = mutableListOf<Pair<String, Throwable>>()
+
     @Before fun setUp() {
         sessionManager = SessionManager()
         transferProgress = TransferProgress()
         storage = FakeFileStorageRepository()
+        loggedErrors.clear()
     }
 
     private fun withApp(block: suspend ApplicationTestBuilder.() -> Unit) = testApplication {
@@ -53,7 +63,8 @@ class FileRoutesTest {
                 SaveUploadUseCase(storage),
                 transferProgress,
                 ZipStreamWriter(),
-                assets
+                assets,
+                logError = { message, cause -> loggedErrors += message to cause }
             )
         }
         block()
@@ -305,6 +316,11 @@ class FileRoutesTest {
         assertEquals("tx-fail", event.transferId)
         assertEquals("upload_failed", event.code)
         scope.cancel()
+
+        assertTrue(
+            "expected the failure to be logged via the logError seam",
+            loggedErrors.any { (message, _) -> message.contains("tx-fail") }
+        )
     }
 
     @Test fun `upload emits a done event`() = withApp {

@@ -11,6 +11,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -72,7 +73,18 @@ class FileServerService : Service() {
                 // re-read (it sees the engine is down, revokes the PIN, and publishes Stopped)
                 // — calling repository.stop() instead would re-enter here via launchService(
                 // ACTION_STOP) and loop, so this drives refresh() instead.
-                serviceScope.launch { serverRepository.refresh() }
+                //
+                // Started UNDISPATCHED rather than left at the default start mode: onStartCommand
+                // runs synchronously on the main thread, and onDestroy() (which cancels
+                // serviceScope below) cannot run until this call returns, so at the moment this
+                // line executes the scope is guaranteed not yet cancelled. UNDISPATCHED begins
+                // running refresh()'s body immediately, inline, right here — before stopSelf()
+                // even runs — rather than merely scheduling it on Dispatchers.Default to start
+                // at some later, unspecified time that a fast-enough onDestroy() could in
+                // principle race. (refresh()'s own Stopped-path body — revoke() then a plain
+                // property set — has no suspension point of its own beyond the mutex, so this
+                // also means the call normally runs to completion here, not just to its start.)
+                serviceScope.launch(start = CoroutineStart.UNDISPATCHED) { serverRepository.refresh() }
                 stopSelf()
             }
         }

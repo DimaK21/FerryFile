@@ -80,10 +80,23 @@ private const val DRAIN_TIMEOUT_MS = 15_000L
  * straight to disk via `SaveUploadUseCase`/`saveUpload` and never buffers it in memory, so its
  * size was never really the risk — while still bounding what an absent or lying
  * `Content-Length` can make Ktor buffer. [FALLBACK_MULTIPART_PART_LIMIT_BYTES] is what applies
- * when the header is missing or unparseable, since that case can't be trusted to bound
- * anything on its own.
+ * when the header is missing or unparseable (a non-positive value is never passed to
+ * `receiveMultipart` — Ktor's own default would otherwise apply, 50 MiB), since that case
+ * can't be trusted to bound anything on its own.
+ *
+ * The declared length itself is *client-supplied* and not otherwise validated, though: without
+ * a ceiling, a peer could send `Content-Length: 9223372036854775807` and get an effectively
+ * unbounded limit again — worse than the original 50 MiB default this whole fix exists to
+ * raise, on an endpoint any authenticated LAN peer can reach. [HARD_MULTIPART_PART_LIMIT_CEILING_BYTES]
+ * clamps the declared value: comfortably above any realistic single file this app is for (a
+ * phone photo burst or video clip — the on-device repro was 75 MiB), while small enough that a
+ * worst-case filename-less part fully buffered up to it (`readRemaining()`, then duplicated
+ * again as a `String`) stays a bounded, finite allocation instead of an attacker-chosen one —
+ * this app declares no `android:largeHeap`, so the default per-process heap ceiling is what a
+ * part buffered up to this size has to survive within.
  */
 private const val FALLBACK_MULTIPART_PART_LIMIT_BYTES = 8L * 1024 * 1024 // 8 MiB
+private const val HARD_MULTIPART_PART_LIMIT_CEILING_BYTES = 256L * 1024 * 1024 // 256 MiB
 
 fun Application.configureFileRoutes(
     listDirectory: ListDirectoryUseCase,
@@ -91,7 +104,12 @@ fun Application.configureFileRoutes(
     saveUpload: SaveUploadUseCase,
     transferProgress: TransferProgress,
     zipStreamWriter: ZipStreamWriter,
-    assets: AssetManager
+    assets: AssetManager,
+    // Seam so local JVM unit tests don't have to go through android.util.Log (a stub that
+    // throws unless mocked): production wiring leaves this at its default, which is the
+    // exact same Log.e call this route always made. Tests can pass their own to assert a
+    // failure was logged, or a no-op to keep quiet, without any test-only framework flag.
+    logError: (String, Throwable) -> Unit = { message, cause -> Log.e(UPLOAD_LOG_TAG, message, cause) }
 ) {
     routing {
         get("/login") {
@@ -227,8 +245,12 @@ fun Application.configureFileRoutes(
                 try {
                     // See FALLBACK_MULTIPART_PART_LIMIT_BYTES's doc comment: bound by this
                     // request's own declared size so a declared-75-MiB upload is allowed its
-                    // 75 MiB, while an absent/unparseable Content-Length can't buffer unbounded.
-                    val multipartPartLimit = totalBytes.takeIf { it > 0 } ?: FALLBACK_MULTIPART_PART_LIMIT_BYTES
+                    // 75 MiB, while an absent/unparseable Content-Length can't buffer unbounded
+                    // — and clamped by HARD_MULTIPART_PART_LIMIT_CEILING_BYTES so a *lying*
+                    // declared size (client-supplied, unverified) can't buffer unbounded either.
+                    val multipartPartLimit = totalBytes.takeIf { it > 0 }
+                        ?.let { minOf(it, HARD_MULTIPART_PART_LIMIT_CEILING_BYTES) }
+                        ?: FALLBACK_MULTIPART_PART_LIMIT_BYTES
 
                     // receiveMultipart()'s parser runs as a child coroutine of whatever job is
                     // active when it's called (Ktor parents it on the ambient
@@ -287,12 +309,12 @@ fun Application.configureFileRoutes(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    // Logged via android.util.Log, not Ktor's call.application.log: this app
-                    // ships no SLF4J binding, so Ktor's own logger is a silent no-op here — the
-                    // original silent-failure symptom included the fact that nothing reached
-                    // logcat even though this catch block did run.
-                    Log.e(
-                        UPLOAD_LOG_TAG,
+                    // Logged via the logError seam (android.util.Log by default), not Ktor's
+                    // call.application.log: this app ships no SLF4J binding, so Ktor's own
+                    // logger is a silent no-op here — the original silent-failure symptom
+                    // included the fact that nothing reached logcat even though this catch
+                    // block did run.
+                    logError(
                         "Upload failed transferId=$transferId dir=${dir.raw} " +
                             "filesWritten=$files bytesWritten=$written",
                         e
@@ -320,8 +342,7 @@ fun Application.configureFileRoutes(
                     } catch (drainFailure: CancellationException) {
                         throw drainFailure
                     } catch (drainFailure: Exception) {
-                        Log.e(
-                            UPLOAD_LOG_TAG,
+                        logError(
                             "Failed to drain the aborted upload's request body transferId=$transferId",
                             drainFailure
                         )
@@ -332,8 +353,7 @@ fun Application.configureFileRoutes(
                     } catch (respondFailure: CancellationException) {
                         throw respondFailure
                     } catch (respondFailure: Exception) {
-                        Log.e(
-                            UPLOAD_LOG_TAG,
+                        logError(
                             "Could not deliver upload_failed response transferId=$transferId",
                             respondFailure
                         )

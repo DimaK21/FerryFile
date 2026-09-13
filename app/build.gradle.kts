@@ -35,17 +35,6 @@ android {
             excludes += "/META-INF/INDEX.LIST"
         }
     }
-    testOptions {
-        unitTests {
-            // Local JVM unit tests run against the stub android.jar, where every framework
-            // method throws by default (e.g. android.util.Log.e — used in FileRoutes.kt's
-            // upload failure path) unless explicitly mocked. This makes such calls a no-op
-            // instead, which is what every existing test already assumed implicitly by never
-            // exercising a Log.e call; the upload failure-path tests are the first to actually
-            // hit one.
-            isReturnDefaultValues = true
-        }
-    }
 }
 
 dependencies {
