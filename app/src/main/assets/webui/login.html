@@ -3,18 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FerryFile — Login</title>
+  <title data-i18n="login.title"></title>
   <link rel="stylesheet" href="/webui/style.css" />
 </head>
 <body>
   <div class="login-wrapper">
     <div class="login-card">
-      <h1>FerryFile</h1>
-      <p class="subtitle">Enter the PIN shown in the FerryFile app</p>
+      <div class="language-switcher">
+        <button
+          type="button"
+          class="btn btn-secondary language-toggle"
+          id="language-toggle"
+          data-i18n="language.switch_to"
+          data-i18n-aria-label="language.switch_aria_label"
+        ></button>
+      </div>
+      <h1 data-i18n="brand"></h1>
+      <p class="subtitle" data-i18n="login.subtitle"></p>
 
       <form id="login-form">
         <div class="form-group">
-          <label for="pin">PIN</label>
+          <label for="pin" data-i18n="login.pin"></label>
           <input
             id="pin"
             type="text"
@@ -27,26 +36,31 @@
           />
         </div>
 
-        <button type="submit" class="btn btn-primary" id="submit-btn">Unlock</button>
+        <button type="submit" class="btn btn-primary" id="submit-btn" data-i18n="login.unlock"></button>
       </form>
 
       <div id="error-msg" class="message error" role="alert"></div>
     </div>
   </div>
 
+  <script src="/webui/i18n.js"></script>
   <script>
     (function () {
+      var i18n = window.FerryFileI18n;
       var form = document.getElementById('login-form');
       var pinInput = document.getElementById('pin');
       var submitBtn = document.getElementById('submit-btn');
       var errorMsg = document.getElementById('error-msg');
+      var errorKey = null;
 
-      function showError(text) {
-        errorMsg.textContent = text;
+      function showError(key) {
+        errorKey = key;
+        errorMsg.textContent = i18n.t(key);
         errorMsg.classList.add('visible');
       }
 
       function clearError() {
+        errorKey = null;
         errorMsg.textContent = '';
         errorMsg.classList.remove('visible');
       }
@@ -61,12 +75,12 @@
 
         var pin = pinInput.value;
         if (pin.length !== 6) {
-          showError('The PIN is 6 digits');
+          showError('login.pin_length');
           return;
         }
 
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Checking…';
+        submitBtn.textContent = i18n.t('login.checking');
 
         fetch('/login', {
           method: 'POST',
@@ -79,22 +93,29 @@
               return;
             }
             if (res.status === 429) {
-              showError('Too many attempts, wait 30s');
+              showError('login.too_many_attempts');
             } else if (res.status === 401) {
-              showError('Wrong PIN');
+              showError('login.wrong_pin');
               pinInput.value = '';
               pinInput.focus();
             } else {
-              showError('Unexpected error, please try again');
+              showError('login.unexpected_error');
             }
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Unlock';
+            submitBtn.textContent = i18n.t('login.unlock');
           })
           .catch(function () {
-            showError('Network error, please try again');
+            showError('login.network_error');
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Unlock';
+            submitBtn.textContent = i18n.t('login.unlock');
           });
+      });
+
+      document.addEventListener('ferryfile-language-change', function () {
+        if (errorKey) errorMsg.textContent = i18n.t(errorKey);
+        submitBtn.textContent = submitBtn.disabled
+          ? i18n.t('login.checking')
+          : i18n.t('login.unlock');
       });
     })();
   </script>

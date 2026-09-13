@@ -3,14 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FerryFile</title>
+  <title data-i18n="files.title"></title>
   <link rel="stylesheet" href="/webui/style.css" />
 </head>
 <body>
   <header class="app-header">
-    <span class="brand">FerryFile</span>
+    <span class="brand" data-i18n="brand"></span>
     <div class="header-actions">
-      <button class="btn btn-danger" id="logout-btn">Logout</button>
+      <button
+        type="button"
+        class="btn btn-secondary language-toggle"
+        id="language-toggle"
+        data-i18n="language.switch_to"
+        data-i18n-aria-label="language.switch_aria_label"
+      ></button>
+      <button class="btn btn-danger" id="logout-btn" data-i18n="files.logout"></button>
     </div>
   </header>
 
@@ -18,7 +25,7 @@
     <!-- Progress bar (hidden until transfer starts) -->
     <div class="progress-container" id="progress-container">
       <div class="progress-label">
-        <span id="progress-filename">Transferring…</span>
+        <span id="progress-filename"></span>
         <span id="progress-pct">0%</span>
       </div>
       <div class="progress-bar">
@@ -28,42 +35,48 @@
     </div>
 
     <!-- Breadcrumb -->
-    <nav class="breadcrumb" id="breadcrumb" aria-label="File path"></nav>
+    <nav
+      class="breadcrumb"
+      id="breadcrumb"
+      aria-label=""
+      data-i18n-aria-label="files.file_path"
+    ></nav>
 
     <!-- Toolbar -->
     <div class="toolbar">
       <label class="btn btn-secondary" id="upload-label">
-        Upload files
+        <span data-i18n="files.upload_files"></span>
         <input type="file" id="upload-input" multiple style="display:none" />
       </label>
     </div>
 
     <p class="root-hint" id="root-hint" hidden>
-      Open one of the folders below to upload files into it.
+      <span data-i18n="files.root_hint"></span>
     </p>
 
     <div class="selection-bar" id="selection-bar" hidden>
-      <span id="selection-count">0 selected</span>
+      <span id="selection-count"></span>
       <div class="selection-actions">
-        <button class="btn btn-primary" id="download-selected">Download</button>
-        <button class="btn btn-secondary" id="clear-selection">Clear</button>
+        <button class="btn btn-primary" id="download-selected" data-i18n="files.download"></button>
+        <button class="btn btn-secondary" id="clear-selection" data-i18n="files.clear"></button>
       </div>
     </div>
 
     <!-- File listing -->
     <div class="file-list" id="file-list">
-      <div class="file-list-empty" id="file-list-empty">Loading…</div>
+      <div class="file-list-empty" id="file-list-empty" data-i18n="files.loading"></div>
     </div>
 
     <!-- Drag-and-drop zone -->
     <div class="drop-zone" id="drop-zone">
-      Drag &amp; drop files here to upload
+      <span data-i18n="files.drop_zone"></span>
     </div>
   </main>
 
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="/webui/i18n.js"></script>
   <script src="/webui/app.js"></script>
 </body>
 </html>

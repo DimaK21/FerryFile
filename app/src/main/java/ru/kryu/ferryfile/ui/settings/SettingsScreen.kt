@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -64,12 +65,12 @@ fun SettingsScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             painter = painterResource(R.drawable.ic_arrow_back),
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.settings_back_content_description)
                         )
                     }
                 }
@@ -86,7 +87,7 @@ fun SettingsScreen(
         ) {
             // Server Port section
             Text(
-                text = "Server Port",
+                text = stringResource(R.string.settings_server_port),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -97,10 +98,10 @@ fun SettingsScreen(
                     portText = newValue
                     viewModel.onPortChanged(newValue)
                 },
-                label = { Text("Port (1024–65535)") },
+                label = { Text(stringResource(R.string.settings_port_hint)) },
                 isError = uiState.portError,
                 supportingText = if (uiState.portError) {
-                    { Text("Port must be between 1024 and 65535") }
+                    { Text(stringResource(R.string.settings_port_error)) }
                 } else null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
@@ -116,7 +117,7 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Dark Theme",
+                    text = stringResource(R.string.settings_dark_theme),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -130,7 +131,7 @@ fun SettingsScreen(
 
             // Storage Folders section
             Text(
-                text = "Storage Folders",
+                text = stringResource(R.string.settings_storage_folders),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -138,7 +139,7 @@ fun SettingsScreen(
 
             if (uiState.sharedFolders.isEmpty()) {
                 Text(
-                    text = "No folders added",
+                    text = stringResource(R.string.settings_no_folders),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -157,7 +158,10 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(onClick = { viewModel.onFolderRemoved(folder.uri) }) {
-                            Text("Remove", color = MaterialTheme.colorScheme.error)
+                            Text(
+                                stringResource(R.string.settings_remove),
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                 }
@@ -168,7 +172,7 @@ fun SettingsScreen(
                 onClick = { folderPickerLauncher.launch(null) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Add Folder")
+                Text(stringResource(R.string.settings_add_folder))
             }
         }
     }

@@ -49,7 +49,11 @@ class FileServerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val channel = NotificationChannel(CHANNEL_ID, "FerryFile Server", NotificationManager.IMPORTANCE_LOW)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.notification_channel_name),
+            NotificationManager.IMPORTANCE_LOW
+        )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
@@ -108,10 +112,10 @@ class FileServerService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("FerryFile")
-            .setContentText(address ?: "No Wi-Fi connection")
+            .setContentTitle(getString(R.string.brand_name))
+            .setContentText(address ?: getString(R.string.notification_no_wifi_connection))
             .setOngoing(true)
-            .addAction(R.drawable.ic_stop, "Stop", stopIntent)
+            .addAction(R.drawable.ic_stop, getString(R.string.notification_stop), stopIntent)
             .build()
     }
 }

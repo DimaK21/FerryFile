@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -64,7 +65,7 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "FerryFile",
+                        text = stringResource(R.string.brand_name),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -72,7 +73,7 @@ fun HomeScreen(
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(
                             painter = painterResource(R.drawable.ic_settings),
-                            contentDescription = "Settings"
+                            contentDescription = stringResource(R.string.home_settings_content_description)
                         )
                     }
                 }
@@ -96,16 +97,18 @@ fun HomeScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "No folders shared yet",
+                            text = stringResource(R.string.home_no_folders_shared_title),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                         Text(
-                            text = "Add a folder so the browser has something to show.",
+                            text = stringResource(R.string.home_no_folders_shared_message),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
-                        TextButton(onClick = onNavigateToSettings) { Text("Add a folder") }
+                        TextButton(onClick = onNavigateToSettings) {
+                            Text(stringResource(R.string.home_add_folder))
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -118,7 +121,11 @@ fun HomeScreen(
                 enabled = !uiState.isStarting,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(text = if (uiState.isRunning) "Stop Server" else "Start Server")
+                Text(
+                    text = stringResource(
+                        if (uiState.isRunning) R.string.home_stop_server else R.string.home_start_server
+                    )
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -135,9 +142,9 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.size(8.dp))
                 Text(
                     text = when {
-                        uiState.isStarting -> "Starting…"
-                        uiState.isRunning -> "Running"
-                        else -> "Stopped"
+                        uiState.isStarting -> stringResource(R.string.home_status_starting)
+                        uiState.isRunning -> stringResource(R.string.home_status_running)
+                        else -> stringResource(R.string.home_status_stopped)
                     },
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -156,7 +163,7 @@ fun HomeScreen(
                         )
                     ) {
                         Text(
-                            text = "No Wi-Fi connection — connect this phone to the same network as your computer.",
+                            text = stringResource(R.string.home_no_wifi_connection),
                             modifier = Modifier.padding(16.dp),
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -179,7 +186,7 @@ private fun ConnectionCard(url: String, pin: String) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "OPEN IN YOUR BROWSER",
+                text = stringResource(R.string.home_open_in_browser),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -191,7 +198,7 @@ private fun ConnectionCard(url: String, pin: String) {
             )
             Spacer(modifier = Modifier.height(20.dp))
             Text(
-                text = "PIN",
+                text = stringResource(R.string.home_pin),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
