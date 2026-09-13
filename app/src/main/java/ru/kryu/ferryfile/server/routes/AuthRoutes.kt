@@ -56,6 +56,7 @@ fun Application.configureAuthRoutes(
         }
 
         post("/logout") {
+            call.sessions.get<UserSession>()?.let { sessionManager.revokeSession(it.token) }
             call.sessions.clear<UserSession>()
             call.respond(HttpStatusCode.OK)
         }

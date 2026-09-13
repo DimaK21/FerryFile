@@ -21,6 +21,10 @@ class SessionManager @Inject constructor() {
 
     fun isValidSession(token: String): Boolean = validTokens.contains(token)
 
+    fun revokeSession(token: String) {
+        validTokens.remove(token)
+    }
+
     fun reset() {
         validTokens.clear()
         failedAttempts.clear()

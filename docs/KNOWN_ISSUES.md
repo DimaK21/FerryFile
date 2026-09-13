@@ -31,3 +31,21 @@ never do for a `FormData`/`-F` upload, since both compute the size upfront, but 
 scripted client could — falls back to an 8 MiB ceiling per part, down from Ktor's own 50 MiB
 default. The shipped web UI is unaffected: `fetch` with a `FormData` body always sends a
 computed `Content-Length`.
+
+## Single files above 256 MiB are rejected on upload
+
+`/api/upload` clamps Ktor's per-part multipart limit at `HARD_MULTIPART_PART_LIMIT_CEILING_BYTES`
+in `FileRoutes.kt`, so a single file above 256 MiB fails to upload.
+
+**Cause:** Ktor 3.1.3's `receiveMultipart(formFieldLimit = ...)` enforces one limit across
+every part of a multipart request at the channel-read level, with no per-part-type override —
+and a part without a filename is buffered whole in memory by Ktor itself before the route ever
+sees it. Some finite ceiling is therefore unavoidable without a custom multipart parser; see
+the KDoc on `HARD_MULTIPART_PART_LIMIT_CEILING_BYTES` for the full trade-off.
+
+**Impact:** a multi-minute 4K video (routinely several hundred MB) is rejected outright. The
+web UI shows a prompt error, not a hang.
+
+**Follow-up:** raising the ceiling properly needs a custom multipart parser that streams
+file parts to disk without Ktor's whole-request limit applying to them; that is a separate
+task and has not been done here.
