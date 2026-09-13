@@ -1,7 +1,6 @@
 package ru.kryu.ferryfile.server
 
 import android.content.Context
-import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -12,7 +11,7 @@ import io.ktor.server.sse.*
 import ru.kryu.ferryfile.domain.usecase.DownloadSelectionUseCase
 import ru.kryu.ferryfile.domain.usecase.ListDirectoryUseCase
 import ru.kryu.ferryfile.domain.usecase.SaveUploadUseCase
-import ru.kryu.ferryfile.server.auth.PasswordHasher
+import ru.kryu.ferryfile.domain.usecase.VerifyAccessCodeUseCase
 import ru.kryu.ferryfile.server.auth.SessionManager
 import ru.kryu.ferryfile.server.routes.configureAuthRoutes
 import ru.kryu.ferryfile.server.routes.configureFileRoutes
@@ -26,25 +25,21 @@ import javax.inject.Singleton
 class KtorServer @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sessionManager: SessionManager,
-    private val passwordHasher: PasswordHasher,
+    private val verifyAccessCode: VerifyAccessCodeUseCase,
     private val listDirectory: ListDirectoryUseCase,
     private val downloadSelection: DownloadSelectionUseCase,
     private val saveUpload: SaveUploadUseCase,
     private val transferProgress: TransferProgress,
-    private val zipStreamWriter: ZipStreamWriter,
-    private val prefs: SharedPreferences
+    private val zipStreamWriter: ZipStreamWriter
 ) {
     @Volatile private var engine: EmbeddedServer<*, *>? = null
-
-    // до Задачи 8 пароль читается напрямую из SharedPreferences
-    private val passwordHash: String get() = prefs.getString("password_hash", "") ?: ""
 
     fun start(port: Int) {
         sessionManager.reset()
         engine = embeddedServer(CIO, port = port, host = "0.0.0.0", watchPaths = emptyList()) {
             install(ContentNegotiation) { json() }
             install(SSE)
-            configureAuthRoutes(sessionManager, { passwordHash }, passwordHasher)
+            configureAuthRoutes(sessionManager, verifyAccessCode)
             configureFileRoutes(
                 listDirectory,
                 downloadSelection,

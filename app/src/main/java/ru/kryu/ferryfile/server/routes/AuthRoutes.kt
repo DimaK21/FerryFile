@@ -8,19 +8,18 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sessions.*
 import kotlinx.serialization.Serializable
-import ru.kryu.ferryfile.server.auth.PasswordHasher
+import ru.kryu.ferryfile.domain.usecase.VerifyAccessCodeUseCase
 import ru.kryu.ferryfile.server.auth.SessionManager
 
 @Serializable
 data class UserSession(val token: String)
 
 @Serializable
-private data class LoginRequest(val password: String)
+private data class LoginRequest(val pin: String)
 
 fun Application.configureAuthRoutes(
     sessionManager: SessionManager,
-    passwordHash: () -> String,
-    hasher: PasswordHasher
+    verifyAccessCode: VerifyAccessCodeUseCase
 ) {
     install(Sessions) {
         cookie<UserSession>("FERRYFILE_SESSION") {
@@ -43,16 +42,16 @@ fun Application.configureAuthRoutes(
                 call.respond(HttpStatusCode.TooManyRequests, "Too many attempts. Wait 30 seconds.")
                 return@post
             }
-            val req = runCatching { call.receive<LoginRequest>() }.getOrNull()
+            val request = runCatching { call.receive<LoginRequest>() }.getOrNull()
                 ?: run { call.respond(HttpStatusCode.BadRequest); return@post }
 
-            if (hasher.verify(req.password, passwordHash())) {
+            if (verifyAccessCode(request.pin)) {
                 sessionManager.resetAttempts(ip)
                 call.sessions.set(UserSession(sessionManager.createSession()))
                 call.respond(HttpStatusCode.OK)
             } else {
                 sessionManager.recordFailedAttempt(ip)
-                call.respond(HttpStatusCode.Unauthorized, "Invalid password")
+                call.respond(HttpStatusCode.Unauthorized, "Invalid PIN")
             }
         }
 

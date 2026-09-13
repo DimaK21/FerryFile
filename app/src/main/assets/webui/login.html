@@ -10,23 +10,24 @@
   <div class="login-wrapper">
     <div class="login-card">
       <h1>FerryFile</h1>
-      <p class="subtitle">Enter the password shown on your Android device</p>
+      <p class="subtitle">Enter the PIN shown in the FerryFile app</p>
 
       <form id="login-form">
         <div class="form-group">
-          <label for="password">Password</label>
+          <label for="pin">PIN</label>
           <input
-            id="password"
-            type="password"
-            autocomplete="current-password"
+            id="pin"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="6"
+            autocomplete="off"
             autofocus
             required
           />
         </div>
 
-        <button type="submit" class="btn btn-primary" id="submit-btn">
-          Unlock
-        </button>
+        <button type="submit" class="btn btn-primary" id="submit-btn">Unlock</button>
       </form>
 
       <div id="error-msg" class="message error" role="alert"></div>
@@ -36,7 +37,7 @@
   <script>
     (function () {
       var form = document.getElementById('login-form');
-      var passwordInput = document.getElementById('password');
+      var pinInput = document.getElementById('pin');
       var submitBtn = document.getElementById('submit-btn');
       var errorMsg = document.getElementById('error-msg');
 
@@ -50,12 +51,19 @@
         errorMsg.classList.remove('visible');
       }
 
+      pinInput.addEventListener('input', function () {
+        pinInput.value = pinInput.value.replace(/\D/g, '').slice(0, 6);
+      });
+
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         clearError();
 
-        var pwd = passwordInput.value;
-        if (!pwd) return;
+        var pin = pinInput.value;
+        if (pin.length !== 6) {
+          showError('The PIN is 6 digits');
+          return;
+        }
 
         submitBtn.disabled = true;
         submitBtn.textContent = 'Checking…';
@@ -63,26 +71,24 @@
         fetch('/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: pwd })
+          body: JSON.stringify({ pin: pin })
         })
           .then(function (res) {
             if (res.ok) {
               window.location.href = '/files';
-            } else if (res.status === 429) {
+              return;
+            }
+            if (res.status === 429) {
               showError('Too many attempts, wait 30s');
-              submitBtn.disabled = false;
-              submitBtn.textContent = 'Unlock';
             } else if (res.status === 401) {
-              showError('Wrong password');
-              passwordInput.value = '';
-              passwordInput.focus();
-              submitBtn.disabled = false;
-              submitBtn.textContent = 'Unlock';
+              showError('Wrong PIN');
+              pinInput.value = '';
+              pinInput.focus();
             } else {
               showError('Unexpected error, please try again');
-              submitBtn.disabled = false;
-              submitBtn.textContent = 'Unlock';
             }
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Unlock';
           })
           .catch(function () {
             showError('Network error, please try again');
