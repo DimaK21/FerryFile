@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Ferry File</string>
+    <string name="app_name">FerryFile</string>
     <string name="brand_name">FerryFile</string>
     <string name="home_settings_content_description">Settings</string>
     <string name="home_no_folders_shared_title">No folders shared yet</string>
