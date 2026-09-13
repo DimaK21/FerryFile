@@ -68,6 +68,12 @@ body {
   margin-bottom: 28px;
 }
 
+.language-switcher {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
 /* ── Form elements ── */
 
 .form-group {
@@ -133,6 +139,11 @@ body {
 
 .btn-secondary:hover {
   background: var(--border);
+}
+
+.language-toggle {
+  padding: 6px 12px;
+  font-size: 0.8125rem;
 }
 
 .btn-danger {
