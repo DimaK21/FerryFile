@@ -44,8 +44,10 @@ open class ServerRepositoryImpl @Inject constructor(
         }
         _state.value = ServerState.Starting
         accessCodes.issue()
-        launchService(FileServerService.ACTION_START)
+        // Resolve the address before starting the service so it can go straight into the
+        // notification text as an intent extra, rather than the service re-deriving it.
         val resolvedAddress = address()
+        launchService(FileServerService.ACTION_START, resolvedAddress?.asUrl())
         // Re-read the current PIN rather than trusting a value captured before the suspending
         // address() lookup: nothing can revoke it while the mutex is held, but publishing
         // whatever is actually current (and failing closed if it is somehow gone) is cheap
@@ -78,8 +80,11 @@ open class ServerRepositoryImpl @Inject constructor(
      * Starts or stops the foreground service. Open + protected so tests can no-op the Android
      * side effect while still exercising the real start/stop/refresh coordination above.
      */
-    protected open fun launchService(action: String) {
-        val intent = Intent(context, FileServerService::class.java).apply { this.action = action }
+    protected open fun launchService(action: String, address: String? = null) {
+        val intent = Intent(context, FileServerService::class.java).apply {
+            this.action = action
+            if (address != null) putExtra(FileServerService.EXTRA_ADDRESS, address)
+        }
         if (action == FileServerService.ACTION_START) {
             ContextCompat.startForegroundService(context, intent)
         } else {

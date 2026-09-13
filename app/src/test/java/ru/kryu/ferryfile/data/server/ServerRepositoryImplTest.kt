@@ -38,7 +38,7 @@ class ServerRepositoryImplTest {
     private fun repo(network: NetworkRepository, accessCodes: InMemoryAccessCodeRepository) =
         object : ServerRepositoryImpl(context, settings, network, accessCodes, server) {
             // No Android foreground-service side effects in a JVM unit test.
-            override fun launchService(action: String) {}
+            override fun launchService(action: String, address: String?) {}
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
