@@ -93,6 +93,8 @@ class FileRoutesTest {
         val disposition = res.headers[HttpHeaders.ContentDisposition]!!
         assertTrue(disposition.contains("""filename="report.pdf""""))
         assertFalse(disposition.contains(".zip"))
+        assertEquals("9", res.headers[HttpHeaders.ContentLength])
+        assertNull(res.headers[HttpHeaders.TransferEncoding])
     }
 
     @Test fun `folder is streamed as a zip named after the folder`() = withApp {

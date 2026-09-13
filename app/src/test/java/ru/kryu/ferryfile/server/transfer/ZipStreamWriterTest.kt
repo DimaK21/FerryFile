@@ -33,7 +33,7 @@ class ZipStreamWriterTest {
         assertEquals(mapOf("docs/a.txt" to "alpha", "docs/sub/b.txt" to "beta"), entries)
     }
 
-    @Test fun `unreadable entries are skipped instead of breaking the archive`() = runTest {
+    @Test fun `unreadable entries are skipped instead of breaking the archive, and are named in a marker entry`() = runTest {
         val out = ByteArrayOutputStream()
 
         writer.write(
@@ -44,21 +44,53 @@ class ZipStreamWriterTest {
             out
         )
 
-        val names = mutableListOf<String>()
-        ZipInputStream(out.toByteArray().inputStream()).use { zip ->
-            var entry = zip.nextEntry
-            while (entry != null) {
-                names += entry.name
-                entry = zip.nextEntry
-            }
-        }
+        val entries = readZipEntries(out)
 
-        assertEquals(listOf("a.txt"), names)
+        assertEquals("alpha", entries["a.txt"])
+        assertEquals("ghost.txt", entries["_ferryfile-skipped.txt"])
+    }
+
+    @Test fun `a complete archive carries no skipped-files marker`() = runTest {
+        val out = ByteArrayOutputStream()
+
+        writer.write(listOf(ZipStreamWriter.Entry("a.txt") { "alpha".byteInputStream() }), out)
+
+        assertEquals(setOf("a.txt"), readZipEntries(out).keys)
+    }
+
+    @Test fun `duplicate entry names are disambiguated so both survive`() = runTest {
+        val out = ByteArrayOutputStream()
+
+        writer.write(
+            listOf(
+                ZipStreamWriter.Entry("a.txt") { "first".byteInputStream() },
+                ZipStreamWriter.Entry("a.txt") { "second".byteInputStream() }
+            ),
+            out
+        )
+
+        val entries = readZipEntries(out)
+
+        assertEquals(setOf("a.txt", "a (2).txt"), entries.keys)
+        assertEquals("first", entries["a.txt"])
+        assertEquals("second", entries["a (2).txt"])
     }
 
     @Test fun `empty selection produces a valid empty archive`() = runTest {
         val out = ByteArrayOutputStream()
         writer.write(emptyList(), out)
         assertTrue(out.size() > 0)
+    }
+
+    private fun readZipEntries(out: ByteArrayOutputStream): Map<String, String> {
+        val entries = mutableMapOf<String, String>()
+        ZipInputStream(out.toByteArray().inputStream()).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                entries[entry.name] = zip.readBytes().toString(Charsets.UTF_8)
+                entry = zip.nextEntry
+            }
+        }
+        return entries
     }
 }

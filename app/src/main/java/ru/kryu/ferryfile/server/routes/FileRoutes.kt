@@ -134,12 +134,14 @@ fun Application.configureFileRoutes(
                         // that, unlike closing only inside the body lambda.
                         stream.use { source ->
                             call.response.header(HttpHeaders.ContentDisposition, attachmentHeader(node.name))
-                            if (node.sizeBytes > 0) {
-                                call.response.header(HttpHeaders.ContentLength, node.sizeBytes.toString())
-                            }
                             val contentType = runCatching { ContentType.parse(node.mimeType) }
                                 .getOrDefault(ContentType.Application.OctetStream)
-                            call.respondOutputStream(contentType) {
+                            // Length goes to the content, not a manually set header: Ktor derives
+                            // Transfer-Encoding: chunked from content.headers alone, so a header
+                            // set by hand on call.response has no effect on that decision and the
+                            // response ends up with both a Content-Length and a contradictory
+                            // chunked encoding.
+                            call.respondOutputStream(contentType, contentLength = node.sizeBytes.takeIf { it > 0 }) {
                                 withContext(Dispatchers.IO) { source.copyTo(this@respondOutputStream) }
                             }
                         }
