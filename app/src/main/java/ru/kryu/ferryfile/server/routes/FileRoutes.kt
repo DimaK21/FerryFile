@@ -1,6 +1,7 @@
 package ru.kryu.ferryfile.server.routes
 
 import android.content.res.AssetManager
+import android.util.Log
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
@@ -42,6 +43,28 @@ data class ErrorResponse(val error: String)
 
 private const val BINARY_MIME = "application/octet-stream"
 private const val PROGRESS_INTERVAL_MS = 200L
+private const val UPLOAD_LOG_TAG = "FerryFileUpload"
+
+/**
+ * Ktor's `call.receiveMultipart(formFieldLimit = ...)` caps every multipart *part* body at
+ * this many bytes — despite its name, that is not limited to text form fields: the CIO
+ * multipart parser (`CIOMultipartDataBase` -> `parsePartBodyImpl` -> `ByteReadChannel.readUntil`,
+ * ktor-http-cio 3.1.3) applies the same limit to file parts, throwing `IOException` once it is
+ * exceeded. Left at its default of 50 MiB (`DEFAULT_FORM_FIELD_LIMIT` in Ktor's
+ * `ApplicationReceiveFunctionsJvm.kt`, 52_428_800 bytes), this is exactly what silently stalled
+ * a 75 MiB upload on-device: the parser threw mid-file, and — because the client was still
+ * streaming the rest of the body into a socket the server had stopped draining — no response
+ * could ever reach it (see the drain-before-respond comment in the catch block below).
+ *
+ * FerryFile's upload handler streams each file part straight to disk
+ * (`SaveUploadUseCase`/`saveUpload`) without ever buffering it in memory, so there is no
+ * memory-safety reason to cap a *file* part's size — an arbitrary larger constant would only
+ * move the same cliff further out, so this expresses "no practical cap" directly. (A non-file
+ * text part is still fully buffered in memory by Ktor before this route ever sees it, but
+ * `/api/upload` is behind session auth and the only client — FerryFile's own web UI — never
+ * sends one, so this does not newly expose anything.)
+ */
+private const val NO_PRACTICAL_MULTIPART_PART_LIMIT = Long.MAX_VALUE
 
 fun Application.configureFileRoutes(
     listDirectory: ListDirectoryUseCase,
@@ -181,10 +204,12 @@ fun Application.configureFileRoutes(
                 var written = 0L
                 var files = 0
                 var lastEmitAt = 0L
+                var multipart: MultiPartData? = null
 
                 try {
-                    val multipart = call.receiveMultipart()
-                    var part = multipart.readPart()
+                    val receivedMultipart = call.receiveMultipart(formFieldLimit = NO_PRACTICAL_MULTIPART_PART_LIMIT)
+                    multipart = receivedMultipart
+                    var part = receivedMultipart.readPart()
                     while (part != null) {
                         try {
                             if (part is PartData.FileItem) {
@@ -218,7 +243,7 @@ fun Application.configureFileRoutes(
                         } finally {
                             part.dispose()
                         }
-                        part = multipart.readPart()
+                        part = receivedMultipart.readPart()
                     }
 
                     transferProgress.emitDone(transferId, files, written)
@@ -226,8 +251,45 @@ fun Application.configureFileRoutes(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    // Logged via android.util.Log, not Ktor's call.application.log: this app
+                    // ships no SLF4J binding, so Ktor's own logger is a silent no-op here — the
+                    // original silent-failure symptom included the fact that nothing reached
+                    // logcat even though this catch block did run.
+                    Log.e(
+                        UPLOAD_LOG_TAG,
+                        "Upload failed transferId=$transferId dir=${dir.raw} " +
+                            "filesWritten=$files bytesWritten=$written",
+                        e
+                    )
                     transferProgress.emitError(transferId, "upload_failed", e.message ?: "Upload failed")
-                    call.respond(HttpStatusCode.InternalServerError, ErrorResponse("upload_failed"))
+
+                    // The client may still be mid-stream when this failed (that is exactly what
+                    // used to happen: the multipart parser hit the old formFieldLimit and threw
+                    // while curl kept pushing bytes). If we don't drain the rest of the request
+                    // body, it backs up in the socket's receive buffer and call.respond() below
+                    // can hang indefinitely instead of ever reaching the client — a response
+                    // (or a connection reset) is required, not silence. Draining is best-effort:
+                    // the channel may already be closed with the same cause, which is fine to
+                    // ignore here since we are already on the error path.
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            var leftover = multipart?.readPart()
+                            while (leftover != null) {
+                                leftover.dispose()
+                                leftover = multipart?.readPart()
+                            }
+                        }
+                    }
+
+                    runCatching {
+                        call.respond(HttpStatusCode.InternalServerError, ErrorResponse("upload_failed"))
+                    }.onFailure { respondFailure ->
+                        Log.e(
+                            UPLOAD_LOG_TAG,
+                            "Could not deliver upload_failed response transferId=$transferId",
+                            respondFailure
+                        )
+                    }
                 }
             }
         }

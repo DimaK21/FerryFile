@@ -26,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.kryu.ferryfile.R
 
@@ -48,7 +49,13 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    // Re-read the server state every time this screen comes back to the foreground, not just
+    // once per composition: the server can be stopped from outside the app (the notification's
+    // Stop action stops the service while the activity is merely paused, not recreated), and
+    // ServerRepository.refresh() is what notices that and republishes Stopped — but only if
+    // something actually calls it. ON_RESUME also fires on first display, so this still covers
+    // the initial load LaunchedEffect(Unit) used to handle.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
     Scaffold(
         // Отступы системных панелей уже заданы в AppNavigation, Scaffold их не добавляет.

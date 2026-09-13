@@ -169,6 +169,18 @@ class FileRoutesTest {
         }
     )
 
+    private fun multipartBytes(fileName: String, content: ByteArray) = MultiPartFormDataContent(
+        formData {
+            append(
+                "file", content,
+                Headers.build {
+                    append(HttpHeaders.ContentType, "application/octet-stream")
+                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                }
+            )
+        }
+    )
+
     @Test fun `upload stores the file and answers with a serializable body`() = withApp {
         storage.addDirectory("0")
         storage.addDirectory("0/docs")
@@ -182,6 +194,34 @@ class FileRoutesTest {
         assertEquals(HttpStatusCode.OK, res.status)
         assertEquals("""{"files":1,"bytes":11}""", res.bodyAsText())
         assertEquals("hello ferry", storage.writtenFiles["0/docs/notes.txt"]!!.toString(Charsets.UTF_8.name()))
+    }
+
+    @Test fun `upload larger than Ktor's default multipart part limit still completes`() = withApp {
+        storage.addDirectory("0")
+        storage.addDirectory("0/docs")
+        val token = sessionManager.createSession()
+
+        // Ktor 3's receiveMultipart() defaults to a 52_428_800-byte (50 MiB) formFieldLimit
+        // that applies to every multipart part, file parts included — this is the exact
+        // ceiling that silently stalled a real 75 MiB upload on-device (see the
+        // NO_PRACTICAL_MULTIPART_PART_LIMIT comment in FileRoutes.kt). A few MiB past that
+        // default is enough to prove the route no longer caps file parts there; going only
+        // a little over keeps the test fast while still crossing the real boundary that broke.
+        val size = 52_428_800 + 2_000_000
+        val bytes = ByteArray(size) { (it % 251).toByte() }
+
+        val res = withTimeout(30_000) {
+            client.post("/api/upload?path=0%2Fdocs&transferId=tx-big") {
+                cookie("FERRYFILE_SESSION", token)
+                setBody(multipartBytes("big.bin", bytes))
+            }
+        }
+
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals("""{"files":1,"bytes":$size}""", res.bodyAsText())
+        val written = storage.writtenFiles["0/docs/big.bin"]!!.toByteArray()
+        assertEquals(size, written.size)
+        assertArrayEquals(bytes, written)
     }
 
     @Test fun `upload emits a done event`() = withApp {
