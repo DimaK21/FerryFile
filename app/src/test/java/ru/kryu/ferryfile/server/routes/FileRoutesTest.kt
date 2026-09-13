@@ -169,17 +169,36 @@ class FileRoutesTest {
         }
     )
 
-    private fun multipartBytes(fileName: String, content: ByteArray) = MultiPartFormDataContent(
-        formData {
-            append(
-                "file", content,
-                Headers.build {
-                    append(HttpHeaders.ContentType, "application/octet-stream")
-                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
-                }
-            )
-        }
-    )
+    /**
+     * Builds a raw multipart/form-data body by hand, deliberately *not* via
+     * `MultiPartFormDataContent`'s `ByteArray`/`ChannelProvider` helpers: a `ByteArray` part
+     * auto-attaches a per-part `Content-Length` header (steering the server into
+     * `parsePartBodyImpl`'s declared-length fast path, not the `readUntil` streaming path that
+     * actually broke), and a `ChannelProvider(size = null)` part drops the *overall* request's
+     * Content-Length along with it — which this route's own fix depends on to size its
+     * multipart limit. A hand-built `ByteArray` body gives an exact overall Content-Length
+     * (`setBody(ByteArray)` always declares its own size) with no per-part Content-Length line
+     * unless [extraPartHeaders] adds one — exactly what curl `-F` and a browser's
+     * `fetch(FormData)` actually send on the wire, and exactly the combination that exercises
+     * the streaming branch.
+     */
+    private fun rawMultipartFileBody(
+        boundary: String,
+        fileName: String,
+        contentType: String,
+        content: ByteArray,
+        extraPartHeaders: String = ""
+    ): ByteArray {
+        val preamble = (
+            "--$boundary\r\n" +
+                "Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n" +
+                "Content-Type: $contentType\r\n" +
+                extraPartHeaders +
+                "\r\n"
+            ).toByteArray(Charsets.UTF_8)
+        val epilogue = "\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8)
+        return preamble + content + epilogue
+    }
 
     @Test fun `upload stores the file and answers with a serializable body`() = withApp {
         storage.addDirectory("0")
@@ -203,17 +222,24 @@ class FileRoutesTest {
 
         // Ktor 3's receiveMultipart() defaults to a 52_428_800-byte (50 MiB) formFieldLimit
         // that applies to every multipart part, file parts included — this is the exact
-        // ceiling that silently stalled a real 75 MiB upload on-device (see the
-        // NO_PRACTICAL_MULTIPART_PART_LIMIT comment in FileRoutes.kt). A few MiB past that
-        // default is enough to prove the route no longer caps file parts there; going only
-        // a little over keeps the test fast while still crossing the real boundary that broke.
+        // ceiling that silently stalled a real 75 MiB upload on-device (see
+        // FALLBACK_MULTIPART_PART_LIMIT_BYTES's comment in FileRoutes.kt). A few MiB past that
+        // default is enough to prove the route no longer caps file parts there; going only a
+        // little over keeps the test fast while still crossing the real boundary that broke.
+        // Sent with no per-part Content-Length (rawMultipartFileBody) but a correct overall
+        // one (a plain ByteArray body declares its own size), matching a real curl -F /
+        // browser upload and this route's own Content-Length-bound formFieldLimit — so it is
+        // allowed its full declared size and hits the actual `readUntil` streaming code path.
+        val boundary = "ferryfileBigUploadBoundary"
         val size = 52_428_800 + 2_000_000
         val bytes = ByteArray(size) { (it % 251).toByte() }
+        val body = rawMultipartFileBody(boundary, "big.bin", "application/octet-stream", bytes)
 
         val res = withTimeout(30_000) {
             client.post("/api/upload?path=0%2Fdocs&transferId=tx-big") {
                 cookie("FERRYFILE_SESSION", token)
-                setBody(multipartBytes("big.bin", bytes))
+                contentType(ContentType.parse("multipart/form-data; boundary=$boundary"))
+                setBody(body)
             }
         }
 
@@ -222,6 +248,63 @@ class FileRoutesTest {
         val written = storage.writtenFiles["0/docs/big.bin"]!!.toByteArray()
         assertEquals(size, written.size)
         assertArrayEquals(bytes, written)
+    }
+
+    @Test fun `a part's bogus declared length ends the request in a response, not a hang`() = withApp {
+        storage.addDirectory("0")
+        storage.addDirectory("0/docs")
+        val token = sessionManager.createSession()
+
+        // A part whose own Content-Length wildly exceeds the whole request's declared size
+        // (which this route now uses as its multipart formFieldLimit) makes Ktor's CIO parser
+        // throw synchronously, inside its own coroutine, before any of this part's body is
+        // read — precisely the failure shape that used to deadlock the connection: the parser
+        // dies while the raw request bytes are still arriving. This is what the raw-channel
+        // drain in FileRoutes.kt's catch block exists for; this test proves the request always
+        // ends in a definite response instead of hanging.
+        val boundary = "ferryfileMalformedBoundary"
+        val body = rawMultipartFileBody(
+            boundary, "bad.bin", "application/octet-stream",
+            content = "short body, nowhere near the declared length".toByteArray(Charsets.UTF_8),
+            extraPartHeaders = "Content-Length: 999999999\r\n"
+        )
+
+        val res = withTimeout(5_000) {
+            client.post("/api/upload?path=0%2Fdocs&transferId=tx-malformed") {
+                cookie("FERRYFILE_SESSION", token)
+                contentType(ContentType.parse("multipart/form-data; boundary=$boundary"))
+                setBody(body)
+            }
+        }
+
+        assertEquals(HttpStatusCode.InternalServerError, res.status)
+        assertEquals("""{"error":"upload_failed"}""", res.bodyAsText())
+    }
+
+    @Test fun `upload failure responds with an error and emits a TransferEvent Error`() = withApp {
+        storage.addDirectory("0")
+        storage.addDirectory("0/docs")
+        storage.createFileFails = true
+        val token = sessionManager.createSession()
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val errorEvent = scope.async(start = CoroutineStart.UNDISPATCHED) {
+            transferProgress.events.filterIsInstance<TransferEvent.Error>().first()
+        }
+
+        val res = withTimeout(5_000) {
+            client.post("/api/upload?path=0%2Fdocs&transferId=tx-fail") {
+                cookie("FERRYFILE_SESSION", token)
+                setBody(multipart("notes.txt", "hello ferry"))
+            }
+        }
+
+        assertEquals(HttpStatusCode.InternalServerError, res.status)
+        assertEquals("""{"error":"upload_failed"}""", res.bodyAsText())
+
+        val event = withTimeout(5_000) { errorEvent.await() }
+        assertEquals("tx-fail", event.transferId)
+        assertEquals("upload_failed", event.code)
+        scope.cancel()
     }
 
     @Test fun `upload emits a done event`() = withApp {

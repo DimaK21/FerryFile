@@ -10,7 +10,13 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import ru.kryu.ferryfile.R
+import ru.kryu.ferryfile.domain.repository.ServerRepository
 import ru.kryu.ferryfile.domain.repository.SettingsRepository
 import ru.kryu.ferryfile.server.KtorServer
 import javax.inject.Inject
@@ -23,6 +29,14 @@ class FileServerService : Service() {
 
     @Inject
     lateinit var settings: SettingsRepository
+
+    // ServerRepository.refresh() is suspend and takes a mutex, so driving it from this Service
+    // (which has no coroutine scope of its own) needs one; cancelled in onDestroy alongside the
+    // engine stop below.
+    @Inject
+    lateinit var serverRepository: ServerRepository
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     companion object {
         const val ACTION_START = "ru.kryu.ferryfile.START_SERVER"
@@ -51,6 +65,14 @@ class FileServerService : Service() {
             }
             ACTION_STOP -> {
                 ktorServer.stop()
+                // Stopping the engine directly (not via ServerRepository.stop()) never
+                // publishes the change: nothing else observes ktorServer.isRunning on its own,
+                // so the Home screen kept showing the last state it had, PIN included, until
+                // something re-read it. ServerRepository.refresh() is exactly that self-healing
+                // re-read (it sees the engine is down, revokes the PIN, and publishes Stopped)
+                // — calling repository.stop() instead would re-enter here via launchService(
+                // ACTION_STOP) and loop, so this drives refresh() instead.
+                serviceScope.launch { serverRepository.refresh() }
                 stopSelf()
             }
         }
@@ -60,6 +82,7 @@ class FileServerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         ktorServer.stop()
+        serviceScope.cancel()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

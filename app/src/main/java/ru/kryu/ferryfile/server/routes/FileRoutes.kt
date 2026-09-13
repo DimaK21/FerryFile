@@ -9,10 +9,13 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.discard
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import ru.kryu.ferryfile.domain.model.FilePath
 import ru.kryu.ferryfile.domain.usecase.DownloadSelectionUseCase
@@ -46,25 +49,41 @@ private const val PROGRESS_INTERVAL_MS = 200L
 private const val UPLOAD_LOG_TAG = "FerryFileUpload"
 
 /**
+ * Bounds how long the upload failure path waits to drain a still-arriving request body after
+ * an upload aborts (see the catch block below) — long enough for a normal LAN client to finish
+ * pushing what it already has queued, bounded so a client that stops sending entirely can't
+ * pin the connection open forever.
+ */
+private const val DRAIN_TIMEOUT_MS = 15_000L
+
+/**
  * Ktor's `call.receiveMultipart(formFieldLimit = ...)` caps every multipart *part* body at
  * this many bytes — despite its name, that is not limited to text form fields: the CIO
  * multipart parser (`CIOMultipartDataBase` -> `parsePartBodyImpl` -> `ByteReadChannel.readUntil`,
  * ktor-http-cio 3.1.3) applies the same limit to file parts, throwing `IOException` once it is
  * exceeded. Left at its default of 50 MiB (`DEFAULT_FORM_FIELD_LIMIT` in Ktor's
  * `ApplicationReceiveFunctionsJvm.kt`, 52_428_800 bytes), this is exactly what silently stalled
- * a 75 MiB upload on-device: the parser threw mid-file, and — because the client was still
- * streaming the rest of the body into a socket the server had stopped draining — no response
- * could ever reach it (see the drain-before-respond comment in the catch block below).
+ * a 75 MiB upload on-device: the parser threw mid-file, and the client was left hanging (see
+ * the catch block below for why, and how that failure path is now fixed).
  *
- * FerryFile's upload handler streams each file part straight to disk
- * (`SaveUploadUseCase`/`saveUpload`) without ever buffering it in memory, so there is no
- * memory-safety reason to cap a *file* part's size — an arbitrary larger constant would only
- * move the same cliff further out, so this expresses "no practical cap" directly. (A non-file
- * text part is still fully buffered in memory by Ktor before this route ever sees it, but
- * `/api/upload` is behind session auth and the only client — FerryFile's own web UI — never
- * sends one, so this does not newly expose anything.)
+ * The fix is *not* to raise this to `Long.MAX_VALUE`. `CIOMultipartDataBase.partToData` only
+ * hands a part to the caller as a stream when it has a filename (a real file); a part
+ * *without* one is fully materialised in memory by Ktor itself — via `body.readRemaining()`,
+ * then again as a `String` — before this route ever gets a chance to inspect or reject it. An
+ * unbounded limit would let any authenticated peer on the LAN OOM-kill the foreground service
+ * with a single giant non-file part, which is a strictly worse hole than the 50 MiB default
+ * this fix set out to raise.
+ *
+ * Instead, the upload route bounds this per request by that request's own declared
+ * `Content-Length`: a request that says it is 75 MiB is allowed to buffer up to 75 MiB for a
+ * part, which is a no-op ceiling for the file part FerryFile actually receives — it streams
+ * straight to disk via `SaveUploadUseCase`/`saveUpload` and never buffers it in memory, so its
+ * size was never really the risk — while still bounding what an absent or lying
+ * `Content-Length` can make Ktor buffer. [FALLBACK_MULTIPART_PART_LIMIT_BYTES] is what applies
+ * when the header is missing or unparseable, since that case can't be trusted to bound
+ * anything on its own.
  */
-private const val NO_PRACTICAL_MULTIPART_PART_LIMIT = Long.MAX_VALUE
+private const val FALLBACK_MULTIPART_PART_LIMIT_BYTES = 8L * 1024 * 1024 // 8 MiB
 
 fun Application.configureFileRoutes(
     listDirectory: ListDirectoryUseCase,
@@ -204,46 +223,63 @@ fun Application.configureFileRoutes(
                 var written = 0L
                 var files = 0
                 var lastEmitAt = 0L
-                var multipart: MultiPartData? = null
 
                 try {
-                    val receivedMultipart = call.receiveMultipart(formFieldLimit = NO_PRACTICAL_MULTIPART_PART_LIMIT)
-                    multipart = receivedMultipart
-                    var part = receivedMultipart.readPart()
-                    while (part != null) {
-                        try {
-                            if (part is PartData.FileItem) {
-                                val fileName = part.originalFileName.orEmpty()
-                                val mimeType = part.contentType?.toString() ?: BINARY_MIME
-                                val alreadyWritten = written
-                                val source = part.provider().toInputStream()
+                    // See FALLBACK_MULTIPART_PART_LIMIT_BYTES's doc comment: bound by this
+                    // request's own declared size so a declared-75-MiB upload is allowed its
+                    // 75 MiB, while an absent/unparseable Content-Length can't buffer unbounded.
+                    val multipartPartLimit = totalBytes.takeIf { it > 0 } ?: FALLBACK_MULTIPART_PART_LIMIT_BYTES
 
-                                val result = saveUpload(dir, fileName, mimeType, source) { chunkBytes ->
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastEmitAt >= PROGRESS_INTERVAL_MS) {
-                                        lastEmitAt = now
-                                        transferProgress.emitProgress(
-                                            transferId, fileName,
-                                            alreadyWritten + chunkBytes, totalBytes, startedAt
-                                        )
+                    // receiveMultipart()'s parser runs as a child coroutine of whatever job is
+                    // active when it's called (Ktor parents it on the ambient
+                    // PipelineContext.coroutineContext — see DefaultTransformJvm.multiPartData).
+                    // Left unwrapped, a parser-level failure (e.g. the limit above, or a bogus
+                    // per-part Content-Length) cancels *this handler's own job* via ordinary
+                    // structured-concurrency child-failure propagation, which then re-fires at
+                    // this handler's very next suspension point regardless of whether the catch
+                    // block below already handled that same exception — so the request would
+                    // still fail without ever delivering our response. supervisorScope isolates
+                    // that: the parser's failure still reaches us exactly the same way (its
+                    // channel is closed with that cause, and readPart() throws it normally), it
+                    // just no longer cancels this handler's own job as a side effect.
+                    supervisorScope {
+                        val multipart = call.receiveMultipart(formFieldLimit = multipartPartLimit)
+                        var part = multipart.readPart()
+                        while (part != null) {
+                            try {
+                                if (part is PartData.FileItem) {
+                                    val fileName = part.originalFileName.orEmpty()
+                                    val mimeType = part.contentType?.toString() ?: BINARY_MIME
+                                    val alreadyWritten = written
+                                    val source = part.provider().toInputStream()
+
+                                    val result = saveUpload(dir, fileName, mimeType, source) { chunkBytes ->
+                                        val now = System.currentTimeMillis()
+                                        if (now - lastEmitAt >= PROGRESS_INTERVAL_MS) {
+                                            lastEmitAt = now
+                                            transferProgress.emitProgress(
+                                                transferId, fileName,
+                                                alreadyWritten + chunkBytes, totalBytes, startedAt
+                                            )
+                                        }
+                                    }
+
+                                    when (result) {
+                                        is SaveUploadUseCase.Result.Saved -> {
+                                            written = alreadyWritten + result.bytesWritten
+                                            files++
+                                        }
+
+                                        SaveUploadUseCase.Result.RootNotWritable,
+                                        SaveUploadUseCase.Result.Failed ->
+                                            throw IOException("Cannot store $fileName")
                                     }
                                 }
-
-                                when (result) {
-                                    is SaveUploadUseCase.Result.Saved -> {
-                                        written = alreadyWritten + result.bytesWritten
-                                        files++
-                                    }
-
-                                    SaveUploadUseCase.Result.RootNotWritable,
-                                    SaveUploadUseCase.Result.Failed ->
-                                        throw IOException("Cannot store $fileName")
-                                }
+                            } finally {
+                                part.dispose()
                             }
-                        } finally {
-                            part.dispose()
+                            part = multipart.readPart()
                         }
-                        part = receivedMultipart.readPart()
                     }
 
                     transferProgress.emitDone(transferId, files, written)
@@ -263,27 +299,39 @@ fun Application.configureFileRoutes(
                     )
                     transferProgress.emitError(transferId, "upload_failed", e.message ?: "Upload failed")
 
-                    // The client may still be mid-stream when this failed (that is exactly what
-                    // used to happen: the multipart parser hit the old formFieldLimit and threw
-                    // while curl kept pushing bytes). If we don't drain the rest of the request
-                    // body, it backs up in the socket's receive buffer and call.respond() below
-                    // can hang indefinitely instead of ever reaching the client — a response
-                    // (or a connection reset) is required, not silence. Draining is best-effort:
-                    // the channel may already be closed with the same cause, which is fine to
-                    // ignore here since we are already on the error path.
-                    runCatching {
-                        withContext(Dispatchers.IO) {
-                            var leftover = multipart?.readPart()
-                            while (leftover != null) {
-                                leftover.dispose()
-                                leftover = multipart?.readPart()
-                            }
+                    // Draining the *multipart* reader would not help here: when the parser
+                    // itself is what failed (e.g. a part past the limit above), Ktor's
+                    // CIOMultipartDataBase.readPart() rethrows that very same cause on the next
+                    // call — its `events` channel was closed with it, and readPart() only treats
+                    // a plain ClosedReceiveChannelException as "no more parts" — so it can never
+                    // actually drain anything in exactly the case that matters. The bytes that
+                    // still need draining live in the *raw* request channel instead, which the
+                    // engine keeps feeding independently of whether the multipart parser above
+                    // is alive, and which has no "already consumed" guard — so it's still there
+                    // to read no matter what receiveMultipart() did. Left undrained, a client
+                    // still mid-stream backs up against a socket the server stopped reading,
+                    // and call.respond() below can hang indefinitely instead of ever reaching
+                    // it. Bounded by a timeout so a client that stops sending entirely can't
+                    // pin the connection open forever.
+                    try {
+                        withTimeoutOrNull(DRAIN_TIMEOUT_MS) {
+                            withContext(Dispatchers.IO) { call.request.receiveChannel().discard() }
                         }
+                    } catch (drainFailure: CancellationException) {
+                        throw drainFailure
+                    } catch (drainFailure: Exception) {
+                        Log.e(
+                            UPLOAD_LOG_TAG,
+                            "Failed to drain the aborted upload's request body transferId=$transferId",
+                            drainFailure
+                        )
                     }
 
-                    runCatching {
+                    try {
                         call.respond(HttpStatusCode.InternalServerError, ErrorResponse("upload_failed"))
-                    }.onFailure { respondFailure ->
+                    } catch (respondFailure: CancellationException) {
+                        throw respondFailure
+                    } catch (respondFailure: Exception) {
                         Log.e(
                             UPLOAD_LOG_TAG,
                             "Could not deliver upload_failed response transferId=$transferId",
