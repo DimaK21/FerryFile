@@ -26,7 +26,10 @@
   var isInitialLoad = true;
   var selectedPaths = [];
   var currentItems = null;
+  var listRequestId = 0;
+  var loadError = false;
   var lastProgress = null;
+  var toastState = null;
 
   function newTransferId() {
     return 'tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
@@ -56,11 +59,30 @@
 
   function showToast(text, type) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastEl.textContent = text;   // safe: textContent only
-    toastEl.className = 'toast visible' + (type ? ' ' + type : '');
+    toastState = { text: text, type: type };
+    renderToast();
     toastTimer = setTimeout(function () {
       toastEl.classList.remove('visible');
+      toastState = null;
     }, 4000);
+  }
+
+  function showLocalizedToast(key, params, type) {
+    if (toastTimer) clearTimeout(toastTimer);
+    toastState = { key: key, params: params || {}, type: type };
+    renderToast();
+    toastTimer = setTimeout(function () {
+      toastEl.classList.remove('visible');
+      toastState = null;
+    }, 4000);
+  }
+
+  function renderToast() {
+    if (!toastState) return;
+    toastEl.textContent = toastState.key
+      ? i18n.t(toastState.key, toastState.params)
+      : toastState.text;   // safe: textContent only
+    toastEl.className = 'toast visible' + (toastState.type ? ' ' + toastState.type : '');
   }
 
   // ── Utility: format bytes ──────────────────────────────────────────────────
@@ -257,6 +279,8 @@
   function loadPath(path) {
     currentPath = path;
     currentItems = null;
+    loadError = false;
+    var requestId = ++listRequestId;
     clearSelection();
     buildBreadcrumb(path);
     applyUploadVisibility(path);
@@ -271,13 +295,15 @@
 
     fetch('/api/list?path=' + encodeURIComponent(path))
       .then(function (res) {
+        if (requestId !== listRequestId) return null;
         if (res.status === 401) { window.location.href = '/login'; return null; }
         if (!res.ok) throw new Error(i18n.t('files.server_error', { status: res.status }));
         return res.json();
       })
       .then(function (data) {
-        if (!data) return;
+        if (!data || requestId !== listRequestId) return;
         currentItems = data.items;
+        loadError = false;
         renderItems(currentItems);
 
         if (isInitialLoad) {
@@ -289,9 +315,11 @@
         }
       })
       .catch(function (err) {
+        if (requestId !== listRequestId) return;
+        loadError = true;
         emptyEl.textContent = i18n.t('files.load_failed');
         emptyEl.style.display = '';
-        showToast(i18n.t('files.load_error') + ': ' + err.message, 'error');
+        showLocalizedToast('files.load_error_details', { message: err.message }, 'error');
       });
   }
 
@@ -310,7 +338,11 @@
   function handleUpload(files, path) {
     if (!files || files.length === 0) return;
     if (path === '/') {
-      showToast(i18n.t('files.open_folder_first'), 'error');
+      showLocalizedToast('files.open_folder_first', {}, 'error');
+      return;
+    }
+    if (currentTransferId) {
+      showLocalizedToast('files.transfer_in_progress', {}, 'error');
       return;
     }
 
@@ -341,7 +373,9 @@
         if (data) completeTransfer(transferId, data.files, data.bytes);
       })
       .catch(function (err) {
-        showToast(i18n.t('files.upload_error') + ': ' + err.message, 'error');
+        if (transferId !== currentTransferId) return;
+        currentTransferId = null;
+        showLocalizedToast('files.upload_error_details', { message: err.message }, 'error');
         hideProgress();
         closeSse();
       });
@@ -358,7 +392,7 @@
     progressPct.textContent = '100%';
 
     var size = bytes != null ? ' (' + formatBytes(bytes) + ')' : '';
-    showToast(i18n.t('transfer.complete', { count: files, size: size }), 'success');
+    showLocalizedToast('transfer.complete', { count: files, size: size }, 'success');
 
     setTimeout(function () {
       hideProgress();
@@ -442,12 +476,14 @@
         // name "error", distinguishable from a real server-sent transfer error only by
         // the absence of parseable data — a connection blip is not a transfer failure.
         if (!data || data.transferId !== currentTransferId) return;
-        showToast(
-          data.code === 'upload_failed'
-            ? i18n.t('files.upload_error')
-            : (data.message || i18n.t('files.transfer_error')),
-          'error'
-        );
+        currentTransferId = null;
+        if (data.code === 'upload_failed') {
+          showLocalizedToast('files.upload_error', {}, 'error');
+        } else if (data.message) {
+          showToast(data.message, 'error');
+        } else {
+          showLocalizedToast('files.transfer_error', {}, 'error');
+        }
         hideProgress();
         closeSse();
       });
@@ -515,11 +551,14 @@
     renderSelectionBar();
     if (currentItems) {
       renderItems(currentItems);
+    } else if (loadError) {
+      emptyEl.textContent = i18n.t('files.load_failed');
     } else {
       emptyEl.textContent = i18n.t('files.loading');
     }
     if (!lastProgress) progressFilename.textContent = i18n.t('files.transferring');
     renderProgressDetails();
+    if (toastState && toastState.key) renderToast();
   });
 
   window.addEventListener('beforeunload', closeSse);

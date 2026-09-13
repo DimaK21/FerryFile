@@ -41,7 +41,10 @@
         load_failed: 'Failed to load folder contents',
         server_error: 'Server error ({status})',
         load_error: 'Load error',
+        load_error_details: 'Load error: {message}',
         upload_error: 'Upload error',
+        upload_error_details: 'Upload error: {message}',
+        transfer_in_progress: 'A transfer is already in progress',
         open_folder_first: 'Open a folder first — the home screen only lists shared folders',
         transfer_error: 'Transfer error'
       },
@@ -99,7 +102,10 @@
         load_failed: 'Не удалось загрузить содержимое папки',
         server_error: 'Ошибка сервера ({status})',
         load_error: 'Ошибка загрузки',
+        load_error_details: 'Ошибка загрузки: {message}',
         upload_error: 'Ошибка отправки',
+        upload_error_details: 'Ошибка отправки: {message}',
+        transfer_in_progress: 'Передача уже выполняется',
         open_folder_first: 'Сначала откройте папку — на главном экране отображаются только общие папки',
         transfer_error: 'Ошибка передачи'
       },
