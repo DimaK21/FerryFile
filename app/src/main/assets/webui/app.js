@@ -22,6 +22,7 @@
   var toastTimer  = null;
   var currentTransferId = null;
   var isInitialLoad = true;
+  var selectedPaths = [];
 
   function newTransferId() {
     return 'tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
@@ -42,6 +43,10 @@
   var progressPct       = document.getElementById('progress-pct');
   var progressFill      = document.getElementById('progress-fill');
   var progressDetails   = document.getElementById('progress-details');
+  var selectionBarEl    = document.getElementById('selection-bar');
+  var selectionCountEl  = document.getElementById('selection-count');
+  var downloadSelectedBtn = document.getElementById('download-selected');
+  var clearSelectionBtn   = document.getElementById('clear-selection');
 
   // ── Utility: toast notification ────────────────────────────────────────────
 
@@ -118,6 +123,38 @@
     });
   }
 
+  // ── Selection ──────────────────────────────────────────────────────────────
+
+  function isSelected(path) {
+    return selectedPaths.indexOf(path) !== -1;
+  }
+
+  function toggleSelection(path, selected) {
+    var index = selectedPaths.indexOf(path);
+    if (selected && index === -1) selectedPaths.push(path);
+    if (!selected && index !== -1) selectedPaths.splice(index, 1);
+    renderSelectionBar();
+  }
+
+  function clearSelection() {
+    selectedPaths = [];
+    renderSelectionBar();
+    var boxes = fileListEl.querySelectorAll('.file-checkbox');
+    for (var i = 0; i < boxes.length; i++) boxes[i].checked = false;
+  }
+
+  function renderSelectionBar() {
+    var count = selectedPaths.length;
+    selectionBarEl.hidden = count === 0;
+    selectionCountEl.textContent = count + ' selected';   // safe: textContent
+  }
+
+  downloadSelectedBtn.addEventListener('click', function () {
+    downloadPaths(selectedPaths.slice());
+  });
+
+  clearSelectionBtn.addEventListener('click', clearSelection);
+
   // ── File list rendering ────────────────────────────────────────────────────
 
   function renderItems(items) {
@@ -127,7 +164,9 @@
     });
 
     if (!items || items.length === 0) {
-      emptyEl.textContent = 'This folder is empty';
+      emptyEl.textContent = currentPath === '/'
+        ? 'No folders shared yet — add one in the FerryFile app on your phone'
+        : 'This folder is empty';
       emptyEl.style.display = '';
       return;
     }
@@ -167,9 +206,33 @@
       }
       meta.textContent = metaText;           // safe: textContent
 
+      // Checkbox — XSS-safe: aria-label built from item.name via setAttribute
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'file-checkbox';
+      checkbox.checked = isSelected(item.path);
+      checkbox.setAttribute('aria-label', 'Select ' + item.name);
+      checkbox.addEventListener('change', function () {
+        toggleSelection(item.path, checkbox.checked);
+      });
+
+      row.appendChild(checkbox);
       row.appendChild(icon);
       row.appendChild(nameBtn);
       row.appendChild(meta);
+
+      if (item.isDirectory) {
+        var dirDownloadBtn = document.createElement('button');
+        dirDownloadBtn.className = 'file-download-btn';
+        dirDownloadBtn.textContent = 'Download';
+        dirDownloadBtn.setAttribute('aria-label', 'Download folder ' + item.name);
+        dirDownloadBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          downloadPaths([item.path]);
+        });
+        row.appendChild(dirDownloadBtn);
+      }
+
       fileListEl.appendChild(row);
     });
   }
@@ -185,6 +248,7 @@
 
   function loadPath(path) {
     currentPath = path;
+    clearSelection();
     buildBreadcrumb(path);
     applyUploadVisibility(path);
 

@@ -476,3 +476,49 @@ body {
     padding: 28px 20px;
   }
 }
+
+/* Панель множественного выбора */
+.selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+}
+
+.selection-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.file-checkbox {
+  margin-right: 10px;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  cursor: pointer;
+}
+
+.file-download-btn {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.file-download-btn:hover {
+  opacity: 1;
+}
+
+.root-hint {
+  margin: 0 0 12px;
+  opacity: 0.75;
+  font-size: 0.9em;
+}
