@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">FerryFile</string>
+    <string name="brand_name">FerryFile</string>
+    <string name="home_settings_content_description">Настройки</string>
+    <string name="home_no_folders_shared_title">Общие папки пока не добавлены</string>
+    <string name="home_no_folders_shared_message">Добавьте папку, чтобы она появилась в браузере.</string>
+    <string name="home_add_folder">Добавить папку</string>
+    <string name="home_start_server">Запустить сервер</string>
+    <string name="home_stop_server">Остановить сервер</string>
+    <string name="home_status_starting">Запуск…</string>
+    <string name="home_status_running">Работает</string>
+    <string name="home_status_stopped">Остановлен</string>
+    <string name="home_no_wifi_connection">Нет подключения к Wi-Fi — подключите телефон к той же сети, что и компьютер.</string>
+    <string name="home_open_in_browser">ОТКРОЙТЕ В БРАУЗЕРЕ</string>
+    <string name="home_pin">PIN</string>
+    <string name="settings_title">Настройки</string>
+    <string name="settings_back_content_description">Назад</string>
+    <string name="settings_server_port">Порт сервера</string>
+    <string name="settings_port_hint">Порт (1024–65535)</string>
+    <string name="settings_port_error">Порт должен быть от 1024 до 65535</string>
+    <string name="settings_dark_theme">Темная тема</string>
+    <string name="settings_storage_folders">Общие папки</string>
+    <string name="settings_no_folders">Папки не добавлены</string>
+    <string name="settings_remove">Удалить</string>
+    <string name="settings_add_folder">Добавить папку</string>
+    <string name="notification_channel_name">Сервер FerryFile</string>
+    <string name="notification_no_wifi_connection">Нет подключения к Wi-Fi</string>
+    <string name="notification_stop">Остановить</string>
+</resources>

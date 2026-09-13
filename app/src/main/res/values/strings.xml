@@ -1,3 +1,29 @@
 <resources>
     <string name="app_name">Ferry File</string>
+    <string name="brand_name">FerryFile</string>
+    <string name="home_settings_content_description">Settings</string>
+    <string name="home_no_folders_shared_title">No folders shared yet</string>
+    <string name="home_no_folders_shared_message">Add a folder so the browser has something to show.</string>
+    <string name="home_add_folder">Add a folder</string>
+    <string name="home_start_server">Start Server</string>
+    <string name="home_stop_server">Stop Server</string>
+    <string name="home_status_starting">Starting…</string>
+    <string name="home_status_running">Running</string>
+    <string name="home_status_stopped">Stopped</string>
+    <string name="home_no_wifi_connection">No Wi-Fi connection — connect this phone to the same network as your computer.</string>
+    <string name="home_open_in_browser">OPEN IN YOUR BROWSER</string>
+    <string name="home_pin">PIN</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_back_content_description">Back</string>
+    <string name="settings_server_port">Server Port</string>
+    <string name="settings_port_hint">Port (1024–65535)</string>
+    <string name="settings_port_error">Port must be between 1024 and 65535</string>
+    <string name="settings_dark_theme">Dark Theme</string>
+    <string name="settings_storage_folders">Storage Folders</string>
+    <string name="settings_no_folders">No folders added</string>
+    <string name="settings_remove">Remove</string>
+    <string name="settings_add_folder">Add Folder</string>
+    <string name="notification_channel_name">FerryFile Server</string>
+    <string name="notification_no_wifi_connection">No Wi-Fi connection</string>
+    <string name="notification_stop">Stop</string>
 </resources>
