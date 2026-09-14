@@ -32,6 +32,12 @@ Everything stays on your local network. Nothing leaves your WiFi.
 - Ktor embedded server (Netty)
 - Storage Access Framework (SAF)
 
+## Versioning
+
+The app uses `major.minor.patch` version names with an optional prerelease suffix. The current stable version is `0.1.0`; setting `APP_VERSION_SUFFIX=beta` produces `0.1.0-beta`.
+
+`APP_VERSION_CODE` is a separate integer and must increase for every artifact uploaded to Google Play. See [docs/VERSIONING.md](docs/VERSIONING.md) for the release procedure.
+
 ## License
 
 [MIT](LICENSE)

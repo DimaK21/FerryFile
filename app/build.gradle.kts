@@ -6,6 +6,37 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+fun requiredVersionInt(name: String): Int {
+    val value = providers.gradleProperty(name).orNull
+        ?: error("Missing required Gradle property: $name")
+    return value.toIntOrNull()
+        ?: error("Gradle property $name must be an integer, got: $value")
+}
+
+val appVersionMajor = requiredVersionInt("APP_VERSION_MAJOR")
+val appVersionMinor = requiredVersionInt("APP_VERSION_MINOR")
+val appVersionPatch = requiredVersionInt("APP_VERSION_PATCH")
+val appVersionCode = requiredVersionInt("APP_VERSION_CODE")
+val appVersionSuffix = providers.gradleProperty("APP_VERSION_SUFFIX").orNull.orEmpty()
+
+require(appVersionMajor >= 0 && appVersionMinor >= 0 && appVersionPatch >= 0) {
+    "APP_VERSION_MAJOR, APP_VERSION_MINOR and APP_VERSION_PATCH must not be negative"
+}
+require(appVersionCode in 1..2_100_000_000) {
+    "APP_VERSION_CODE must be between 1 and 2,100,000,000"
+}
+require(
+    appVersionSuffix.isEmpty() ||
+        appVersionSuffix.matches(Regex("[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*"))
+) {
+    "APP_VERSION_SUFFIX must contain only SemVer prerelease identifiers"
+}
+
+val appVersionName = buildString {
+    append("$appVersionMajor.$appVersionMinor.$appVersionPatch")
+    if (appVersionSuffix.isNotEmpty()) append("-$appVersionSuffix")
+}
+
 android {
     namespace = "ru.kryu.ferryfile"
     compileSdk = 36
@@ -13,8 +44,8 @@ android {
         applicationId = "ru.kryu.ferryfile"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
