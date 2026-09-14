@@ -18,3 +18,4 @@ local.properties
 /.claude/
 /.superpowers/
 /.worktrees/
+/app/release/
