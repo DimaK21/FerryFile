@@ -19,3 +19,6 @@ local.properties
 /.superpowers/
 /.worktrees/
 /app/release/
+/keystore.properties
+*.jks
+*.keystore

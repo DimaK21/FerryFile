@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +7,29 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.isFile) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+fun releaseSigningProperty(name: String): String? =
+    providers.gradleProperty(name).orNull?.takeIf { it.isNotBlank() }
+        ?: providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFilePath = releaseSigningProperty("RELEASE_STORE_FILE")
+val releaseStorePassword = releaseSigningProperty("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningProperty("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningProperty("RELEASE_KEY_PASSWORD")
+val releaseKeystoreFile = releaseStoreFilePath?.let { rootProject.file(it) }
+val releaseSigningProperties = listOf(
+    "RELEASE_STORE_FILE" to releaseStoreFilePath,
+    "RELEASE_STORE_PASSWORD" to releaseStorePassword,
+    "RELEASE_KEY_ALIAS" to releaseKeyAlias,
+    "RELEASE_KEY_PASSWORD" to releaseKeyPassword,
+)
 
 fun requiredVersionInt(name: String): Int {
     val value = providers.gradleProperty(name).orNull
@@ -48,12 +73,20 @@ android {
         versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    signingConfigs {
+        create("release") {
+            releaseKeystoreFile?.let { storeFile = it }
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -67,6 +100,35 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/INDEX.LIST"
         }
+    }
+}
+
+val validateReleaseSigning = tasks.register("validateReleaseSigning") {
+    doLast {
+        val missingProperties = releaseSigningProperties
+            .filter { (_, value) -> value == null }
+            .map { (name, _) -> name }
+        check(missingProperties.isEmpty()) {
+            "Release signing is not configured. Set ${missingProperties.joinToString()} " +
+                "in keystore.properties, Gradle properties, or environment variables."
+        }
+
+        val keystoreFile = requireNotNull(releaseKeystoreFile)
+        check(keystoreFile.isFile) {
+            "Release keystore does not exist: ${keystoreFile.absolutePath}"
+        }
+    }
+}
+
+tasks.configureEach {
+    if (
+        name == "assembleRelease" ||
+        name == "bundleRelease" ||
+        name == "validateSigningRelease" ||
+        name.startsWith("packageRelease") ||
+        name.startsWith("signRelease")
+    ) {
+        dependsOn(validateReleaseSigning)
     }
 }
 
