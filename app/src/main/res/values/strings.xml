@@ -23,6 +23,7 @@
     <string name="settings_no_folders">No folders added</string>
     <string name="settings_remove">Remove</string>
     <string name="settings_add_folder">Add Folder</string>
+    <string name="settings_version">Version %1$s</string>
     <string name="notification_channel_name">FerryFile Server</string>
     <string name="notification_no_wifi_connection">No Wi-Fi connection</string>
     <string name="notification_stop">Stop</string>
