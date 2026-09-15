@@ -116,6 +116,36 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 16.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_use_https),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.settings_use_https_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.useHttps,
+                        onCheckedChange = { viewModel.onHttpsChanged(it) }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
                 // Dark Theme section
                 Row(
                     modifier = Modifier.fillMaxWidth(),

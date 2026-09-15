@@ -28,10 +28,17 @@ class AuthRoutesTest {
         pin = accessCodes.issue().digits
     }
 
-    private fun withApp(block: suspend ApplicationTestBuilder.() -> Unit) = testApplication {
+    private fun withApp(
+        secureCookies: Boolean = false,
+        block: suspend ApplicationTestBuilder.() -> Unit
+    ) = testApplication {
         install(ContentNegotiation) { json() }
         application {
-            configureAuthRoutes(sessionManager, VerifyAccessCodeUseCase(accessCodes))
+            configureAuthRoutes(
+                sessionManager,
+                VerifyAccessCodeUseCase(accessCodes),
+                secureCookies = secureCookies
+            )
             // Test-only protected endpoint so tests can prove a session cookie does (or no
             // longer does) authenticate, without depending on any real protected route.
             routing {
@@ -52,7 +59,15 @@ class AuthRoutesTest {
     @Test fun `correct pin returns 200 and sets a session cookie`() = withApp {
         val res = login(pin)
         assertEquals(HttpStatusCode.OK, res.status)
-        assertTrue(res.headers[HttpHeaders.SetCookie]!!.contains("FERRYFILE_SESSION"))
+        val setCookie = res.headers[HttpHeaders.SetCookie]!!
+        assertTrue(setCookie.contains("FERRYFILE_SESSION"))
+        assertFalse(setCookie.contains("Secure"))
+    }
+
+    @Test fun `HTTPS session cookie is marked secure`() = withApp(secureCookies = true) {
+        val res = login(pin)
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertTrue(res.headers[HttpHeaders.SetCookie]!!.contains("Secure"))
     }
 
     @Test fun `wrong pin returns 401`() = withApp {

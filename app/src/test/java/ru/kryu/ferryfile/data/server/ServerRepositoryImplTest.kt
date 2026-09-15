@@ -45,6 +45,7 @@ class ServerRepositoryImplTest {
     @Test
     fun `a refresh racing a still-starting server cannot leave a Running state with a revoked pin`() = runTest {
         whenever(settings.port).thenReturn(MutableStateFlow(Port.DEFAULT))
+        whenever(settings.useHttps).thenReturn(MutableStateFlow(false))
         // The engine has not reported itself running yet — the exact window the finding describes.
         whenever(server.isRunning).thenReturn(false)
 

@@ -25,6 +25,7 @@ class SettingsRepositoryImplTest {
         whenever(prefs.getString(eq("saf_uris"), any())).thenReturn("[]")
         whenever(prefs.getInt(eq("server_port"), any())).thenReturn(8080)
         whenever(prefs.getBoolean(eq("dark_theme"), any())).thenReturn(true)
+        whenever(prefs.getBoolean(eq("use_https"), any())).thenReturn(false)
         whenever(permissions.displayName(any())).thenAnswer { it.arguments[0].toString().substringAfterLast('/') }
         whenever(permissions.takePersistable(any())).thenReturn(true)
     }
@@ -98,5 +99,16 @@ class SettingsRepositoryImplTest {
         repo.setDarkTheme(false)
         verify(editor).putBoolean("dark_theme", false)
         assertFalse(repo.darkTheme.value)
+    }
+
+    @Test fun `HTTPS is disabled by default`() {
+        assertFalse(repo().useHttps.value)
+    }
+
+    @Test fun `setUseHttps persists and updates the flow`() = runTest {
+        val repo = repo()
+        repo.setUseHttps(true)
+        verify(editor).putBoolean("use_https", true)
+        assertTrue(repo.useHttps.value)
     }
 }

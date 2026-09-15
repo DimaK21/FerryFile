@@ -13,11 +13,15 @@
     <string name="home_no_wifi_connection">Нет подключения к Wi-Fi — подключите телефон к той же сети, что и компьютер.</string>
     <string name="home_open_in_browser">ОТКРОЙТЕ В БРАУЗЕРЕ</string>
     <string name="home_pin">PIN</string>
+    <string name="home_certificate_fingerprint">ОТПЕЧАТОК СЕРТИФИКАТА</string>
+    <string name="home_certificate_hint">Если браузер покажет предупреждение, сравните этот отпечаток перед продолжением.</string>
     <string name="settings_title">Настройки</string>
     <string name="settings_back_content_description">Назад</string>
     <string name="settings_server_port">Порт сервера</string>
     <string name="settings_port_hint">Порт (1024–65535)</string>
     <string name="settings_port_error">Порт должен быть от 1024 до 65535</string>
+    <string name="settings_use_https">Использовать HTTPS</string>
+    <string name="settings_use_https_description">Используется самоподписанный сертификат. Браузер может показать предупреждение. Применяется при следующем запуске сервера.</string>
     <string name="settings_dark_theme">Темная тема</string>
     <string name="settings_storage_folders">Общие папки</string>
     <string name="settings_no_folders">Папки не добавлены</string>

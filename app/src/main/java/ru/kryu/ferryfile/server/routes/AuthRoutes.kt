@@ -19,11 +19,13 @@ private data class LoginRequest(val pin: String)
 
 fun Application.configureAuthRoutes(
     sessionManager: SessionManager,
-    verifyAccessCode: VerifyAccessCodeUseCase
+    verifyAccessCode: VerifyAccessCodeUseCase,
+    secureCookies: Boolean = false
 ) {
     install(Sessions) {
         cookie<UserSession>("FERRYFILE_SESSION") {
             cookie.httpOnly = true
+            cookie.secure = secureCookies
             cookie.path = "/"
         }
     }

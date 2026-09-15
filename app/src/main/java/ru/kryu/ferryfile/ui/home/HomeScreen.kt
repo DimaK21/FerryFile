@@ -34,6 +34,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -154,7 +155,11 @@ fun HomeScreen(
 
             if (uiState.isRunning) {
                 if (uiState.hasWifi) {
-                    ConnectionCard(url = uiState.url, pin = uiState.pin)
+                     ConnectionCard(
+                         url = uiState.url,
+                         pin = uiState.pin,
+                         fingerprint = uiState.certificateFingerprint
+                     )
                 } else {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -177,7 +182,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ConnectionCard(url: String, pin: String) {
+private fun ConnectionCard(url: String, pin: String, fingerprint: String) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -210,6 +215,30 @@ private fun ConnectionCard(url: String, pin: String) {
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 6.sp
             )
+            if (fingerprint.isNotBlank()) {
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = stringResource(R.string.home_certificate_fingerprint),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = fingerprint,
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.home_certificate_hint),
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

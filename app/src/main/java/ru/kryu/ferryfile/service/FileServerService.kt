@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +21,7 @@ import ru.kryu.ferryfile.R
 import ru.kryu.ferryfile.domain.repository.ServerRepository
 import ru.kryu.ferryfile.domain.repository.SettingsRepository
 import ru.kryu.ferryfile.server.KtorServer
+import java.net.URI
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -45,6 +47,7 @@ class FileServerService : Service() {
         const val EXTRA_ADDRESS = "ru.kryu.ferryfile.EXTRA_ADDRESS"
         const val NOTIFICATION_ID = 1
         const val CHANNEL_ID = "ferryfile_server"
+        const val LOG_TAG = "FerryFileServer"
     }
 
     override fun onCreate() {
@@ -60,36 +63,31 @@ class FileServerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> if (!ktorServer.isRunning) {
-                val port = settings.port.value.value
+                val advertisedAddress = intent.getStringExtra(EXTRA_ADDRESS)
+                val parsedAddress = advertisedAddress
+                    ?.let { runCatching { URI(it) }.getOrNull() }
+                val port = parsedAddress?.port?.takeIf { it > 0 } ?: settings.port.value.value
+                val useHttps = parsedAddress?.scheme?.equals("https", ignoreCase = true)
+                    ?: settings.useHttps.value
                 startForeground(
                     NOTIFICATION_ID,
-                    buildNotification(intent.getStringExtra(EXTRA_ADDRESS)),
+                    buildNotification(advertisedAddress),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                 )
-                ktorServer.start(port)
+                try {
+                    ktorServer.start(port, parsedAddress?.host, useHttps)
+                } catch (cause: Exception) {
+                    val protocol = if (useHttps) "HTTPS" else "HTTP"
+                    Log.e(LOG_TAG, "Failed to start $protocol server", cause)
+                    ktorServer.stop()
+                    refreshAndStop()
+                }
             }
             ACTION_STOP -> {
                 ktorServer.stop()
-                // Stopping the engine directly (not via ServerRepository.stop()) never
-                // publishes the change: nothing else observes ktorServer.isRunning on its own,
-                // so the Home screen kept showing the last state it had, PIN included, until
-                // something re-read it. ServerRepository.refresh() is exactly that self-healing
-                // re-read (it sees the engine is down, revokes the PIN, and publishes Stopped)
-                // — calling repository.stop() instead would re-enter here via launchService(
-                // ACTION_STOP) and loop, so this drives refresh() instead.
-                //
-                // Started UNDISPATCHED rather than left at the default start mode: onStartCommand
-                // runs synchronously on the main thread, and onDestroy() (which cancels
-                // serviceScope below) cannot run until this call returns, so at the moment this
-                // line executes the scope is guaranteed not yet cancelled. UNDISPATCHED begins
-                // running refresh()'s body immediately, inline, right here — before stopSelf()
-                // even runs — rather than merely scheduling it on Dispatchers.Default to start
-                // at some later, unspecified time that a fast-enough onDestroy() could in
-                // principle race. (refresh()'s own Stopped-path body — revoke() then a plain
-                // property set — has no suspension point of its own beyond the mutex, so this
-                // also means the call normally runs to completion here, not just to its start.)
-                serviceScope.launch(start = CoroutineStart.UNDISPATCHED) { serverRepository.refresh() }
-                stopSelf()
+                // Refresh before stopping the service so a refresh waiting for the repository
+                // mutex cannot be cancelled by onDestroy().
+                refreshAndStop()
             }
         }
         return START_NOT_STICKY
@@ -118,4 +116,15 @@ class FileServerService : Service() {
             .addAction(R.drawable.ic_stop, getString(R.string.notification_stop), stopIntent)
             .build()
     }
+
+    private fun refreshAndStop() {
+        serviceScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                serverRepository.refresh()
+            } finally {
+                stopSelf()
+            }
+        }
+    }
+
 }

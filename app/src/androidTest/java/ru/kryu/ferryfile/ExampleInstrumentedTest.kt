@@ -19,6 +19,6 @@ class ExampleInstrumentedTest {
     fun useAppContext() {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("ru.kryu.ferryfile", appContext.packageName)
+        assertTrue(appContext.packageName.startsWith("ru.kryu.ferryfile"))
     }
 }

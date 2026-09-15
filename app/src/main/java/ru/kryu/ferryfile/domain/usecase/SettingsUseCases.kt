@@ -14,6 +14,10 @@ class ObserveDarkThemeUseCase @Inject constructor(private val settings: Settings
     operator fun invoke(): StateFlow<Boolean> = settings.darkTheme
 }
 
+class ObserveHttpsUseCase @Inject constructor(private val settings: SettingsRepository) {
+    operator fun invoke(): StateFlow<Boolean> = settings.useHttps
+}
+
 class ObserveSharedFoldersUseCase @Inject constructor(private val settings: SettingsRepository) {
     operator fun invoke(): StateFlow<List<SharedFolder>> = settings.sharedFolders
 }
@@ -31,6 +35,10 @@ class SetPortUseCase @Inject constructor(private val settings: SettingsRepositor
 
 class SetDarkThemeUseCase @Inject constructor(private val settings: SettingsRepository) {
     suspend operator fun invoke(enabled: Boolean) = settings.setDarkTheme(enabled)
+}
+
+class SetHttpsUseCase @Inject constructor(private val settings: SettingsRepository) {
+    suspend operator fun invoke(enabled: Boolean) = settings.setUseHttps(enabled)
 }
 
 class AddSharedFolderUseCase @Inject constructor(private val settings: SettingsRepository) {

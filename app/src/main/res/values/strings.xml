@@ -13,11 +13,15 @@
     <string name="home_no_wifi_connection">No Wi-Fi connection — connect this phone to the same network as your computer.</string>
     <string name="home_open_in_browser">OPEN IN YOUR BROWSER</string>
     <string name="home_pin">PIN</string>
+    <string name="home_certificate_fingerprint">CERTIFICATE FINGERPRINT</string>
+    <string name="home_certificate_hint">If the browser shows a certificate warning, compare this fingerprint before continuing.</string>
     <string name="settings_title">Settings</string>
     <string name="settings_back_content_description">Back</string>
     <string name="settings_server_port">Server Port</string>
     <string name="settings_port_hint">Port (1024–65535)</string>
     <string name="settings_port_error">Port must be between 1024 and 65535</string>
+    <string name="settings_use_https">Use HTTPS</string>
+    <string name="settings_use_https_description">Uses a self-signed certificate. Your browser may show a certificate warning. Takes effect the next time the server starts.</string>
     <string name="settings_dark_theme">Dark Theme</string>
     <string name="settings_storage_folders">Storage Folders</string>
     <string name="settings_no_folders">No folders added</string>

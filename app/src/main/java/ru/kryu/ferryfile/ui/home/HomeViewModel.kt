@@ -21,6 +21,7 @@ data class HomeUiState(
     val isStarting: Boolean = false,
     val url: String = "",
     val pin: String = "",
+    val certificateFingerprint: String = "",
     val hasWifi: Boolean = true,
     val hasSharedFolders: Boolean = true
 )
@@ -46,6 +47,7 @@ class HomeViewModel @Inject constructor(
                     isRunning = true,
                     url = server.address?.asUrl().orEmpty(),
                     pin = server.pin.digits,
+                    certificateFingerprint = server.certificateFingerprint,
                     hasWifi = server.address != null,
                     hasSharedFolders = folders.isNotEmpty()
                 )

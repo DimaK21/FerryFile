@@ -29,3 +29,23 @@
 # Ktor's JVM-only debug detector references APIs unavailable on Android.
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
+
+# Netty keeps optional integrations for native OpenSSL, alternate logging backends,
+# Bouncy Castle, Conscrypt and Jetty ALPN on its classpath. FerryFile uses the
+# platform JDK TLS provider and does not enable those integrations.
+-dontwarn io.netty.internal.tcnative.**
+-dontwarn org.apache.log4j.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.conscrypt.**
+-dontwarn org.eclipse.jetty.npn.**
+-dontwarn reactor.blockhound.**
+
+# Netty creates the selected NIO server channel through a reflective factory.
+-keepattributes Signature,InnerClasses,EnclosingMethod
+-keepnames class io.netty.** { *; }
+-keepclassmembernames class io.netty.** { *; }
+-keep class io.netty.channel.socket.nio.NioServerSocketChannel { *; }
+-keep class io.netty.channel.socket.nio.NioSocketChannel { *; }
+-keepclassmembernames class io.netty.buffer.AbstractByteBufAllocator { *; }
+-keepclassmembernames class io.netty.util.ReferenceCountUtil { *; }

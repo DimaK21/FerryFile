@@ -12,10 +12,12 @@ import kotlinx.coroutines.launch
 import ru.kryu.ferryfile.domain.model.SharedFolder
 import ru.kryu.ferryfile.domain.usecase.AddSharedFolderUseCase
 import ru.kryu.ferryfile.domain.usecase.ObserveDarkThemeUseCase
+import ru.kryu.ferryfile.domain.usecase.ObserveHttpsUseCase
 import ru.kryu.ferryfile.domain.usecase.ObservePortUseCase
 import ru.kryu.ferryfile.domain.usecase.ObserveSharedFoldersUseCase
 import ru.kryu.ferryfile.domain.usecase.RemoveSharedFolderUseCase
 import ru.kryu.ferryfile.domain.usecase.SetDarkThemeUseCase
+import ru.kryu.ferryfile.domain.usecase.SetHttpsUseCase
 import ru.kryu.ferryfile.domain.usecase.SetPortUseCase
 import javax.inject.Inject
 
@@ -23,6 +25,7 @@ data class SettingsUiState(
     val port: Int = 8080,
     val portError: Boolean = false,
     val darkTheme: Boolean = true,
+    val useHttps: Boolean = false,
     val sharedFolders: List<SharedFolder> = emptyList()
 )
 
@@ -30,9 +33,11 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     observePort: ObservePortUseCase,
     observeDarkTheme: ObserveDarkThemeUseCase,
+    observeHttps: ObserveHttpsUseCase,
     observeSharedFolders: ObserveSharedFoldersUseCase,
     private val setPort: SetPortUseCase,
     private val setDarkTheme: SetDarkThemeUseCase,
+    private val setHttps: SetHttpsUseCase,
     private val addSharedFolder: AddSharedFolderUseCase,
     private val removeSharedFolder: RemoveSharedFolderUseCase
 ) : ViewModel() {
@@ -40,12 +45,13 @@ class SettingsViewModel @Inject constructor(
     private val portError = MutableStateFlow(false)
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        observePort(), observeDarkTheme(), observeSharedFolders(), portError
-    ) { port, dark, folders, error ->
+        observePort(), observeDarkTheme(), observeHttps(), observeSharedFolders(), portError
+    ) { port, dark, https, folders, error ->
         SettingsUiState(
             port = port.value,
             portError = error,
             darkTheme = dark,
+            useHttps = https,
             sharedFolders = folders
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
@@ -57,6 +63,8 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onDarkThemeChanged(enabled: Boolean) = viewModelScope.launch { setDarkTheme(enabled) }
+
+    fun onHttpsChanged(enabled: Boolean) = viewModelScope.launch { setHttps(enabled) }
 
     fun onFolderPicked(uri: String) = viewModelScope.launch { addSharedFolder(uri) }
 

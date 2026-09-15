@@ -14,6 +14,9 @@ Android 11, SDK 30. Клиентом выступал Mac в той же Wi-Fi-�
 **Phone Wi-Fi address:** `192.168.0.5` · **Mac address:** `192.168.0.4`
 **Package:** `ru.kryu.ferryfile`
 
+> Этот исторический отчёт выполнен до добавления опционального HTTPS; команды ниже используют HTTP,
+> который остаётся режимом по умолчанию.
+
 All screenshots referenced below are saved under `/tmp/ferryfile-verify/`. All curl commands were run from the Mac against `http://192.168.0.5:<port>`.
 
 ---

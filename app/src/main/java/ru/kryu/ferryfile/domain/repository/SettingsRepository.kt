@@ -10,11 +10,15 @@ interface SettingsRepository {
 
     val darkTheme: StateFlow<Boolean>
 
+    val useHttps: StateFlow<Boolean>
+
     val sharedFolders: StateFlow<List<SharedFolder>>
 
     suspend fun setPort(port: Port)
 
     suspend fun setDarkTheme(enabled: Boolean)
+
+    suspend fun setUseHttps(enabled: Boolean)
 
     /** @return `false`, если система не выдала постоянное разрешение на папку. */
     suspend fun addSharedFolder(uri: String): Boolean

@@ -25,6 +25,9 @@ class SettingsRepositoryImpl @Inject constructor(
     private val _darkTheme = MutableStateFlow(prefs.getBoolean(KEY_DARK_THEME, true))
     override val darkTheme: StateFlow<Boolean> = _darkTheme.asStateFlow()
 
+    private val _useHttps = MutableStateFlow(prefs.getBoolean(KEY_USE_HTTPS, false))
+    override val useHttps: StateFlow<Boolean> = _useHttps.asStateFlow()
+
     private val _sharedFolders = MutableStateFlow(readUris().toFolders())
     override val sharedFolders: StateFlow<List<SharedFolder>> = _sharedFolders.asStateFlow()
 
@@ -36,6 +39,11 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setDarkTheme(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_DARK_THEME, enabled).apply()
         _darkTheme.value = enabled
+    }
+
+    override suspend fun setUseHttps(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_USE_HTTPS, enabled).apply()
+        _useHttps.value = enabled
     }
 
     override suspend fun addSharedFolder(uri: String): Boolean {
@@ -69,6 +77,7 @@ class SettingsRepositoryImpl @Inject constructor(
     private companion object {
         const val KEY_PORT = "server_port"
         const val KEY_DARK_THEME = "dark_theme"
+        const val KEY_USE_HTTPS = "use_https"
         const val KEY_SAF_URIS = "saf_uris"
         const val EMPTY_JSON_ARRAY = "[]"
     }

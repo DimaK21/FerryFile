@@ -34,7 +34,8 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
-ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
+ktor-server-netty = { group = "io.ktor", name = "ktor-server-netty", version.ref = "ktor" }
+ktor-network-tls-certificates = { group = "io.ktor", name = "ktor-network-tls-certificates", version.ref = "ktor" }
 ktor-server-auth = { group = "io.ktor", name = "ktor-server-auth", version.ref = "ktor" }
 ktor-server-sessions = { group = "io.ktor", name = "ktor-server-sessions", version.ref = "ktor" }
 ktor-server-sse = { group = "io.ktor", name = "ktor-server-sse", version.ref = "ktor" }
@@ -58,4 +59,3 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-

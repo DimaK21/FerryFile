@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import ru.kryu.ferryfile.domain.model.ServerAddress
 import ru.kryu.ferryfile.domain.model.ServerState
 import ru.kryu.ferryfile.domain.repository.AccessCodeRepository
@@ -36,6 +38,7 @@ open class ServerRepositoryImpl @Inject constructor(
     // network lookup; without serialization a refresh() landing inside that suspension could
     // revoke the PIN a concurrent start() is about to publish (see ServerRepositoryImplTest).
     private val mutex = Mutex()
+    private var activeUseHttps = false
 
     override suspend fun start(): Unit = mutex.withLock {
         if (server.isRunning) {
@@ -46,19 +49,34 @@ open class ServerRepositoryImpl @Inject constructor(
         accessCodes.issue()
         // Resolve the address before starting the service so it can go straight into the
         // notification text as an intent extra, rather than the service re-deriving it.
-        val resolvedAddress = address()
-        launchService(FileServerService.ACTION_START, resolvedAddress?.asUrl())
+        val useHttps = settings.useHttps.value
+        val resolvedAddress = address(useHttps)
+        // Generate/load the certificate before dispatching the service. Apart from keeping RSA
+        // work off the service's main thread, this guarantees that the state fingerprint belongs
+        // to the exact keystore the server will use.
         // Re-read the current PIN rather than trusting a value captured before the suspending
         // address() lookup: nothing can revoke it while the mutex is held, but publishing
         // whatever is actually current (and failing closed if it is somehow gone) is cheap
         // insurance against ever showing a PIN that verify() would reject.
-        _state.value = accessCodes.current?.let { ServerState.Running(resolvedAddress, it) }
+        val certificateFingerprint = if (useHttps) {
+            withContext(Dispatchers.IO) {
+                server.prepareTls(resolvedAddress?.host).orEmpty()
+            }
+        } else {
+            ""
+        }
+        launchService(FileServerService.ACTION_START, resolvedAddress?.asUrl())
+        activeUseHttps = useHttps
+        _state.value = accessCodes.current?.let {
+            ServerState.Running(resolvedAddress, it, certificateFingerprint)
+        }
             ?: ServerState.Stopped
     }
 
     override suspend fun stop(): Unit = mutex.withLock {
         launchService(FileServerService.ACTION_STOP)
         accessCodes.revoke()
+        activeUseHttps = false
         _state.value = ServerState.Stopped
     }
 
@@ -67,14 +85,19 @@ open class ServerRepositoryImpl @Inject constructor(
     private suspend fun refreshLocked() {
         _state.value = if (!server.isRunning) {
             accessCodes.revoke()
+            activeUseHttps = false
             ServerState.Stopped
         } else {
-            ServerState.Running(address(), accessCodes.current ?: accessCodes.issue())
+            ServerState.Running(
+                address(activeUseHttps),
+                accessCodes.current ?: accessCodes.issue(),
+                if (activeUseHttps) server.currentTlsFingerprint().orEmpty() else ""
+            )
         }
     }
 
-    private suspend fun address(): ServerAddress? =
-        network.localAddress()?.let { ServerAddress(it, settings.port.value) }
+    private suspend fun address(useHttps: Boolean): ServerAddress? =
+        network.localAddress()?.let { ServerAddress(it, settings.port.value, useHttps) }
 
     /**
      * Starts or stops the foreground service. Open + protected so tests can no-op the Android

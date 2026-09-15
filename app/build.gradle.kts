@@ -105,6 +105,7 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/io.netty.versions.properties"
         }
     }
 }
@@ -149,7 +150,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
 
     implementation(libs.ktor.server.core)
-    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.netty)
+    implementation(libs.ktor.network.tls.certificates)
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.sessions)
     implementation(libs.ktor.server.sse)
