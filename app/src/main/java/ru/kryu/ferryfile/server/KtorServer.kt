@@ -8,6 +8,11 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.sse.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import ru.kryu.ferryfile.domain.usecase.DownloadSelectionUseCase
 import ru.kryu.ferryfile.domain.usecase.ListDirectoryUseCase
 import ru.kryu.ferryfile.domain.usecase.SaveUploadUseCase
@@ -36,6 +41,7 @@ class KtorServer @Inject constructor(
     private val tlsCertificateManager: TlsCertificateManager
 ) {
     @Volatile private var engine: EmbeddedServer<*, *>? = null
+    private val lifecycleMutex = Mutex()
     private var preparedTls: TlsConfiguration? = null
 
     @Synchronized
@@ -48,60 +54,83 @@ class KtorServer @Inject constructor(
     @Synchronized
     fun currentTlsFingerprint(): String? = preparedTls?.fingerprint
 
-    fun start(port: Int, host: String? = null, useHttps: Boolean = false) {
-        sessionManager.reset()
-        val module: Application.() -> Unit = {
-            install(ContentNegotiation) { json() }
-            install(SSE)
-            configureAuthRoutes(sessionManager, verifyAccessCode, secureCookies = useHttps)
-            configureFileRoutes(
-                listDirectory,
-                downloadSelection,
-                saveUpload,
-                transferProgress,
-                zipStreamWriter,
-                context.assets
-            )
-            configureSseRoutes(transferProgress)
-        }
+    @Synchronized
+    fun currentTlsHost(): String? = preparedTls?.host
 
-        engine = if (useHttps) {
-            val tls = synchronized(this) {
-                preparedTls ?: tlsCertificateManager.prepare(host).also { preparedTls = it }
+    suspend fun start(port: Int, host: String? = null, useHttps: Boolean = false) =
+        lifecycleMutex.withLock {
+            if (engine != null) return@withLock
+
+            sessionManager.reset()
+            val module: Application.() -> Unit = {
+                install(ContentNegotiation) { json() }
+                install(SSE)
+                configureAuthRoutes(sessionManager, verifyAccessCode, secureCookies = useHttps)
+                configureFileRoutes(
+                    listDirectory,
+                    downloadSelection,
+                    saveUpload,
+                    transferProgress,
+                    zipStreamWriter,
+                    context.assets
+                )
+                configureSseRoutes(transferProgress)
             }
-            embeddedServer(
-                Netty,
-                configure = {
-                    enableHttp2 = false
-                    sslConnector(
-                        keyStore = tls.keyStore,
-                        keyAlias = tls.keyAlias,
-                        keyStorePassword = { tls.password.toCharArray() },
-                        privateKeyPassword = { tls.password.toCharArray() }
-                    ) {
-                        this.host = "0.0.0.0"
-                        this.port = port
-                        enabledProtocols = listOf("TLSv1.2", "TLSv1.3")
+
+            // Keep the engine assignment and bind operation together. If the service is
+            // destroyed while starting, cancellation must not leave an untracked Netty engine.
+            withContext(NonCancellable + Dispatchers.IO) {
+                engine = if (useHttps) {
+                    val tls = synchronized(this@KtorServer) {
+                        preparedTls ?: tlsCertificateManager.prepare(host).also { preparedTls = it }
                     }
-                },
-                module = module
-            )
-        } else {
-            synchronized(this) { preparedTls = null }
-            embeddedServer(
-                Netty,
-                port = port,
-                host = "0.0.0.0",
-                module = module
-            )
-        }.start(wait = false)
+                    embeddedServer(
+                        Netty,
+                        configure = {
+                            enableHttp2 = false
+                            sslConnector(
+                                keyStore = tls.keyStore,
+                                keyAlias = tls.keyAlias,
+                                keyStorePassword = { tls.password.toCharArray() },
+                                privateKeyPassword = { tls.password.toCharArray() }
+                            ) {
+                                this.host = "0.0.0.0"
+                                this.port = port
+                                enabledProtocols = listOf("TLSv1.2", "TLSv1.3")
+                            }
+                        },
+                        module = module
+                    )
+                } else {
+                    synchronized(this@KtorServer) { preparedTls = null }
+                    embeddedServer(
+                        Netty,
+                        port = port,
+                        host = "0.0.0.0",
+                        module = module
+                    )
+                }.start(wait = false)
+            }
     }
 
-    fun stop() {
-        engine?.stop(gracePeriodMillis = 1_000, timeoutMillis = 5_000)
+    suspend fun stop() = lifecycleMutex.withLock {
+        val currentEngine = engine ?: run {
+            synchronized(this@KtorServer) { preparedTls = null }
+            sessionManager.reset()
+            return@withLock
+        }
+
+        // Publish the stopped state before the blocking shutdown so a queued start can wait on
+        // lifecycleMutex instead of being mistaken for a duplicate while Netty is draining.
         engine = null
-        synchronized(this) { preparedTls = null }
-        sessionManager.reset()
+        try {
+            withContext(NonCancellable + Dispatchers.IO) {
+                currentEngine.stop(gracePeriodMillis = 1_000, timeoutMillis = 5_000)
+            }
+        } finally {
+            synchronized(this@KtorServer) { preparedTls = null }
+            sessionManager.reset()
+        }
     }
 
     val isRunning: Boolean get() = engine != null

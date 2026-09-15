@@ -1,15 +1,15 @@
 # FerryFile: Google Play readiness
 
-Дата аудита: 2026-09-14
+Дата аудита: 2026-09-16
 
-Документ фиксирует состояние проекта и список работ перед публикацией в Google Play. Аудит основан на исходном коде, конфигурации проекта, результатах Gradle-проверок 2026-09-14 и отчёте ручной проверки на Android 11 из `docs/DEVICE_VERIFICATION.md`.
+Документ фиксирует состояние проекта и список работ перед публикацией в Google Play. Проверяемый HEAD: `develop` / `9365991` (`fix server lifecycle`). Аудит основан на исходном коде, конфигурации проекта, результатах Gradle-проверок 2026-09-16, release dependency graph, instrumentation smoke test и отчёте ручной проверки на Android 11 из `docs/DEVICE_VERIFICATION.md`.
 
 ## Краткий вывод
 
 FerryFile - Android-приложение, которое запускает на телефоне локальный HTTP-сервер для обмена файлами
 с компьютером через браузер; HTTPS с самоподписанным сертификатом можно включить в настройках.
 
-Текущая версия - рабочий MVP. Локальные unit-тесты, debug-сборка и release AAB проходят, но перед production-публикацией нужно устранить следующие основные риски:
+Текущая версия - рабочий MVP. 128 локальных unit-тестов, debug-сборка, release AAB и один instrumentation smoke test проходят, но перед production-публикацией нужно устранить следующие основные риски:
 
 1. HTTP используется по умолчанию; включаемый HTTPS использует device-specific self-signed certificate, и браузеру нужно подтвердить сертификат по fingerprint.
 2. `dataSync` foreground service рассчитан на постоянную работу, что конфликтует с ограничениями Android 15+ и создаёт высокий риск несоответствия требованиям Google Play к FGS.
@@ -17,9 +17,11 @@ FerryFile - Android-приложение, которое запускает на
 4. В приложении нет privacy policy, ссылки на неё и экрана About.
 5. Не реализован runtime-запрос `POST_NOTIFICATIONS`.
 6. Не хватает Compose UI-, instrumentation- и multi-version device-тестов.
-7. README заявляет сценарий и технологии, которые не совпадают с текущей реализацией; корневого `LICENSE` нет.
+7. README всё ещё обещает QR-код, которого нет в текущем UI; корневого `LICENSE` нет.
 
-С предыдущего аудита исправлены: отзыв сессии при logout, обработка крупных upload и ошибок upload, обновление Home после Stop из уведомления, локализация Android/web UI, а также release-версионирование, signing validation, R8 и resource shrinking.
+Историческая проблема Ktor CIO с `Expect: 100-continue` из `docs/KNOWN_ISSUES.md` не относится к текущему production runtime: приложение использует `ktor-server-netty:3.1.3`, а `ktor-server-cio` отсутствует в release runtime classpath. Подробности и оставшиеся upload-ограничения разделены в `KNOWN_ISSUES.md`.
+
+С предыдущего аудита исправлены: отзыв сессии при logout, опциональный HTTPS с fingerprint pairing, обработка крупных upload и ошибок upload, IPv6-форматирование URL, обновление Home после Stop из уведомления, последовательная обработка команд сервиса, локализация Android/web UI, а также release-версионирование, signing validation, R8 и resource shrinking.
 
 ## Что уже есть
 
@@ -29,6 +31,7 @@ FerryFile - Android-приложение, которое запускает на
 - Storage Access Framework для выбора папок.
 - Foreground service для работы сервера в фоне.
 - Временный шестизначный PIN, UUID-сессии, отзыв сессий и ограничение неудачных попыток.
+- Последовательная очередь Start/Stop в foreground service и обновление состояния репозитория после действия из notification.
 - Просмотр папок, загрузка файлов и потоковое скачивание ZIP.
 - SSE-прогресс загрузки.
 - Английская и русская локализация Android-приложения и web UI.
@@ -50,20 +53,20 @@ FerryFile - Android-приложение, которое запускает на
 - `app/src/main/java/ru/kryu/ferryfile/domain/model/ServerAddress.kt` формирует URL с `http://` по умолчанию и `https://` при включенной настройке.
 - `app/src/main/java/ru/kryu/ferryfile/server/KtorServer.kt` использует Netty; TLS-коннектор включается только при выборе HTTPS.
 - Сертификат генерируется отдельно для установки приложения, сохраняется в приватном хранилище и содержит текущий LAN IP в SAN.
-- PIN, session cookie и содержимое файлов шифруются при передаче; fingerprint показывается на Home для проверки первого подключения.
+- При HTTPS PIN, session cookie и содержимое файлов шифруются при передаче; fingerprint показывается на Home для проверки первого подключения. В HTTP-режиме по умолчанию эти данные передаются без шифрования.
 
 Оставшиеся задачи:
 
 - Для повторяющихся подключений можно добавить установку локального CA, чтобы убрать предупреждение браузера.
 - Указать в privacy policy, как и куда передаются файлы.
-- При смене Wi-Fi адреса требуется перезапустить сервер, чтобы сертификат соответствовал новому IP.
+- При смене адреса активной сети HTTPS-сервер обнаруживает несовпадение SAN и автоматически перезапускается с сертификатом для нового адреса. Для HTTP сертификат не используется.
 
 ### 2. Foreground service и длительность работы
 
 Текущее состояние:
 
-- `app/src/main/AndroidManifest.xml:34-37` объявляет `foregroundServiceType="dataSync"`.
-- `app/src/main/java/ru/kryu/ferryfile/service/FileServerService.kt:55-85` запускает сервер после нажатия Start и оставляет его работать до остановки пользователем.
+- `app/src/main/AndroidManifest.xml` объявляет `foregroundServiceType="dataSync"`.
+- `FileServerService` запускает сервер после нажатия Start, обрабатывает Start/Stop через последовательную очередь и оставляет его работать до остановки пользователем.
 - Для Android 15+ `dataSync` имеет лимит шесть часов за 24 часа фоновой работы.
 - `FileServerService` не реализует `onTimeout()`.
 - Для target Android 14+ Google Play требует валидный тип FGS, декларацию в Play Console, пользовательский и заметный сценарий, возможность остановки и работу только необходимое время. Исключение для `dataSync` в policy относится к Play Asset Delivery, а не к локальному файловому серверу.
@@ -80,14 +83,14 @@ FerryFile - Android-приложение, которое запускает на
 
 Что уже исправлено:
 
-- `app/src/main/java/ru/kryu/ferryfile/server/routes/AuthRoutes.kt:58-60` отзывает токен на logout и очищает cookie.
+- `app/src/main/java/ru/kryu/ferryfile/server/routes/AuthRoutes.kt:60-63` отзывает токен на logout и очищает cookie.
 - `KtorServer.start()` и `KtorServer.stop()` сбрасывают все in-memory сессии.
 - `AuthRoutesTest` проверяет, что повторное использование cookie после logout получает `401`.
 
 Оставшиеся проблемы:
 
 - `app/src/main/java/ru/kryu/ferryfile/server/auth/SessionManager.kt:16-26`: токен не имеет TTL и считается валидным до logout, остановки или перезапуска процесса.
-- Cookie задаёт `HttpOnly` и `Path`, а `Secure` включается только для выбранного HTTPS-режима; явных `SameSite` и согласованного серверного TTL пока нет.
+- Cookie задаёт `HttpOnly` и `Path`, а `Secure` включается только для выбранного HTTPS-режима; `SameSite` и TTL явно не настроены. В сохранённой device-проверке наблюдался `Max-Age=604800`, но этот срок не задан кодом и не ограничивает срок жизни серверного токена.
 - Ограничение попыток применяется только по IP: три ошибки блокируют адрес на 30 секунд; нет общего лимита и лимита активных сессий.
 
 Нужно:
@@ -112,8 +115,8 @@ FerryFile - Android-приложение, которое запускает на
 
 ### Жизненный цикл сервера
 
-- `KtorServer.stop()` может блокировать main thread до пяти секунд: `KtorServer.kt:55-57`.
-- Остановку нужно выполнять вне main thread, сохранив последовательность состояний.
+- `KtorServer.stop()` всё ещё может ждать завершения Netty до пяти секунд, но теперь выполняет блокирующий shutdown в `NonCancellable + Dispatchers.IO`, не блокируя main thread.
+- `FileServerService` сериализует Start/Stop, а после Stop из notification вызывает `ServerRepository.refresh()`; это закрывает прежнее окно со stale-состоянием Home.
 - Реализовать корректный `onTimeout()` для Android 15+.
 - Ошибка запуска Ktor не переводит UI в отдельное состояние ошибки: нужно проверить занятый порт, отказ запуска и сбой foreground service.
 - Покрыть process death, повторный запуск, остановку из notification и сбой запуска.
@@ -127,7 +130,7 @@ FerryFile - Android-приложение, которое запускает на
 - Нужно либо запрещать изменение порта при активном сервере, либо автоматически перезапускать его.
 - `WifiNetworkRepository` выбирает первый не-loopback IPv4-адрес активной сети. Это может быть VPN, hotspot, Ethernet или другой интерфейс, а не ожидаемый Wi-Fi.
 - Нужно показывать доступные интерфейсы или явно сообщать, какой адрес выбран.
-- Рассмотреть поддержку IPv6 и корректное отображение URL с квадратными скобками.
+- Форматирование IPv6-адреса в URL с квадратными скобками уже реализовано и покрыто unit-тестом, но `WifiNetworkRepository` по-прежнему выбирает только IPv4; обнаружение IPv6 нужно добавить отдельно.
 - `0.0.0.0` расширяет область прослушивания на все интерфейсы; нужно оценить ограничение доступа локальными адресами.
 
 ### SAF и файлы
@@ -140,15 +143,15 @@ FerryFile - Android-приложение, которое запускает на
 - Добавить отмену передачи и корректно закрывать потоки при disconnect.
 - Проверить архивирование больших каталогов, недоступных дочерних папок и файлов нулевого размера.
 
-Крупная загрузка больше стандартного лимита Ktor исправлена: `FileRoutes.kt` ограничивает multipart по объявленному размеру запроса, fallback равен 8 MiB, жёсткий ceiling - 256 MiB; файл при этом потоково пишется на диск. Unit-тест пересекает старый 50 MiB предел, а ручная проверка 75 MiB прошла с совпадающей контрольной суммой. Это не отменяет лимит 256 MiB и не закрывает проблемы со свободным местом и частичным файлом.
+Крупная загрузка больше стандартного лимита Ktor исправлена: `FileRoutes.kt` ограничивает multipart-часть по объявленному размеру запроса, fallback равен 8 MiB, жёсткий ceiling - 256 MiB на одну часть; файл при этом потоково пишется на диск. Это не общий лимит всего multipart-запроса: лимиты общего размера, числа файлов и параллельных передач на сервере ещё не заданы. Unit-тест пересекает старый 50 MiB предел, а ручная проверка 75 MiB прошла с совпадающей контрольной суммой. Ограничение 256 MiB, проблемы со свободным местом и частичным файлом остаются.
 
 ### Web UI и HTTP-защита
 
 - Добавить `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy` и подходящий `Cache-Control`.
 - Для страниц и API с сессией исключить кэширование чувствительных ответов.
-- Добавить защиту от устаревших ответов при быстрых переходах между папками.
-- Явно ограничить или запретить параллельные upload в одной вкладке либо корректно поддержать их.
-- Зафиксировать решение по известной проблеме Ktor CIO с `Expect: 100-continue`, описанной в `docs/KNOWN_ISSUES.md`: файл записывается полностью, но curl-подобный клиент может не разобрать финальный ответ. Web UI на `fetch(FormData)` проблему не воспроизводит; перед production нужно оценить обновление Ktor или явно задокументировать ограничение.
+- Web UI уже отбрасывает устаревшие ответы `/api/list` после быстрого перехода между папками.
+- Web UI запрещает второй upload, пока первый активен; серверного лимита для прямых клиентов и межсессионной конкуренции пока нет.
+- Историческая проблема `Expect: 100-continue` относится к CIO и не используется текущим Netty runtime; обновление Ktor из-за неё не требуется. Для поддерживаемых внешних scripted-клиентов совместимость Netty всё равно стоит отдельно проверить на устройстве.
 - Учесть, что клиент без `Content-Length` получает fallback-лимит 8 MiB на multipart part; это также описано в `docs/KNOWN_ISSUES.md`.
 
 ## P1: privacy и требования Google Play
@@ -205,7 +208,7 @@ FerryFile - Android-приложение, которое запускает на
 - Добавить copy URL, copy PIN и, возможно, QR-код после стабилизации HTTPS/pairing.
 - Добавить экран About с версией, privacy policy, лицензией и контактами поддержки. Версия уже отображается в Settings, но отдельного About нет.
 - Показывать понятные ошибки при отсутствии сети, занятом порте, отзыве SAF-разрешения и отказе уведомлений.
-- Синхронизировать README и store listing с реальным поведением: сейчас README упоминает QR-код, пароль и Netty, а код использует PIN, без QR-кода и Ktor CIO.
+- Синхронизировать README и store listing с реальным поведением: README всё ещё упоминает QR-код, которого нет в UI; PIN и Netty в README уже соответствуют коду. Формулировки `Nothing leaves your WiFi` и постоянной доступности сервера нужно дополнить оговорками про `0.0.0.0`, выбранный интерфейс и FGS policy.
 - README заявляет MIT-лицензию, но корневой файл `LICENSE` в проекте не найден. Добавить его или исправить заявление о лицензии.
 
 ## P2: release engineering и тестирование
@@ -215,7 +218,7 @@ FerryFile - Android-приложение, которое запускает на
 - Текущая конфигурация - `versionName = 0.1.0`, `versionCode = 1`; перед каждой загрузкой в Play нужно осознанно увеличить `versionCode`.
 - `isMinifyEnabled = true` и `isShrinkResources = true` уже включены.
 - `validateReleaseSigning` требует отдельный keystore и не допускает fallback на debug key.
-- `./gradlew :app:bundleRelease --console=plain` уже прошёл: выполнены signing validation, `lintVitalRelease`, R8 и подписывание `app/build/outputs/bundle/release/app-release.aab`.
+- 2026-09-16 `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:bundleRelease --console=plain` прошёл: выполнены 128 unit-тестов, signing validation, `lintVitalRelease`, R8 и подписывание `app/build/outputs/bundle/release/app-release.aab`.
 - В Play Console всё ещё нужно подключить Play App Signing, проверить upload key и загрузить именно release AAB.
 - Проверить отсутствие debug-конфигурации, тестовых bypass и лишних логов на release-артефакте.
 - Проверить размер AAB/APK и содержимое через APK Analyzer.
@@ -224,7 +227,7 @@ FerryFile - Android-приложение, которое запускает на
 
 ### Backup
 
-Сейчас `android:allowBackup="true"`, а `backup_rules.xml` и `data_extraction_rules.xml` фактически оставлены шаблонными. Настройки лежат в `EncryptedSharedPreferences`, а сохранённые SAF URI могут стать недействительными после restore.
+Сейчас `android:allowBackup="true"`, а `backup_rules.xml` и `data_extraction_rules.xml` фактически оставлены шаблонными. Настройки лежат в `EncryptedSharedPreferences`, сохранённые SAF URI могут стать недействительными после restore, а HTTPS-ключ хранится в приватном файле `ferryfile-server.p12` и тоже требует явной backup-политики.
 
 Нужно определить стратегию:
 
@@ -237,14 +240,15 @@ FerryFile - Android-приложение, которое запускает на
 
 Уже есть и проходят:
 
-- unit/server tests для PIN, revoke/logout, rate limit, маршрутов, path traversal, upload, ошибки upload, архивации и конкурентного состояния репозитория;
+- 128 unit/server tests для PIN, revoke/logout, rate limit, маршрутов, path traversal, HTTPS-сертификата, upload, ошибки upload, архивации и конкурентного состояния репозитория;
 - регрессионный unit-тест upload за старым 50 MiB лимитом Ktor;
 - ручная проверка на Android 11: основной сценарий, upload 75 MiB после исправления и Stop из notification.
+- `./gradlew :app:connectedDebugAndroidTest --console=plain`: один instrumentation smoke test на OnePlus Nord N10 / Android 11; он проверяет только базовый context/package и не заменяет функциональные device-тесты.
 
 Нужно добавить и прогнать:
 
-- unit-тесты TTL, cookie security и лимитов активных сессий;
-- server tests для invalid session, logout/replay cookie и upload limits;
+- unit-тесты TTL, `SameSite`, cookie security и лимитов активных сессий;
+- расширенные server tests для истёкших/некорректных сессий, replay cookie и upload limits для прямых клиентов;
 - Compose UI tests для Start/Stop, Settings и ошибок;
 - instrumentation tests для notification permission и foreground service;
 - device tests для Android 11, 13, 14, 15 и 16;
@@ -253,13 +257,14 @@ FerryFile - Android-приложение, которое запускает на
 - тесты больших файлов с лимитом 256 MiB, отмены, переполнения диска, частичного файла и разрыва соединения;
 - проверку 16 KB page size environment, APK alignment и release-артефакта через APK Analyzer.
 
-## Проверка на 2026-09-14
+## Проверка на 2026-09-16
 
-- `./gradlew :app:testDebugUnitTest :app:assembleDebug --console=plain` - `BUILD SUCCESSFUL`; 115 unit-тестов, 0 failures, 0 errors.
-- `./gradlew :app:bundleRelease --console=plain` - `BUILD SUCCESSFUL`; прошли `validateReleaseSigning`, `lintVitalRelease`, R8 и подписывание AAB.
+- `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:bundleRelease --console=plain` - `BUILD SUCCESSFUL`; 128 unit-тестов, 0 failures, 0 errors; прошли `validateReleaseSigning`, `lintVitalRelease`, R8 и подписывание AAB.
+- `./gradlew :app:connectedDebugAndroidTest --console=plain` - `BUILD SUCCESSFUL`; 1 smoke test на `BE2029 - 11`.
+- `./gradlew :app:dependencies --configuration releaseRuntimeClasspath --console=plain` - production runtime содержит `ktor-server-netty:3.1.3`; `ktor-server-cio` не разрешается.
 - Артефакт создан в `app/build/outputs/bundle/release/app-release.aab`. Это локально подписанный release bundle; подключение Play App Signing и загрузка в Play Console ещё не выполнены.
-- Ручная проверка из `docs/DEVICE_VERIFICATION.md` выполнена на OnePlus Nord N10 с Android 11 / API 30. Основной сценарий работает; исправления 75 MiB upload и Stop из notification подтверждены на устройстве.
-- Не проверены instrumentation/UI-тесты, Android 13-16, FGS timeout, restore/backup, 16 KB page size и фактическая проверка в Play Console.
+- Ручная проверка из `docs/DEVICE_VERIFICATION.md` выполнена на OnePlus Nord N10 с Android 11 / API 30. В отчёте есть подтверждение основного сценария, исправления 75 MiB upload и Stop из notification; это историческая запись, а не новый полный end-to-end прогон 2026-09-16.
+- Не проверены полноценные Compose UI-тесты, notification permission, FGS timeout, Android 13-16, restore/backup, 16 KB page size и фактическая проверка в Play Console.
 
 ## Рекомендуемый порядок работ
 
@@ -271,7 +276,8 @@ FerryFile - Android-приложение, которое запускает на
 - [x] Исправить обновление Home после Stop из notification.
 - [ ] Исправить порт, network address, process death и SAF edge cases.
 - [x] Устранить старый 50 MiB stall при upload и добавить failure-path тесты.
-- [ ] Добавить upload limits, cancellation и partial-file cleanup; отдельно решить Ktor `100-continue`.
+- [ ] Добавить общий upload limit, cancellation и partial-file cleanup; отдельно закрепить поведение для chunked-клиентов.
+- [x] Зафиксировать Netty как production engine и снять историческую CIO-проблему с текущего release runtime.
 - [ ] Подготовить privacy policy и in-app ссылку.
 - [ ] Добавить About/onboarding и обновить README, LICENSE и store-facing описание.
 - [ ] Добавить release/UI/device-тесты.

@@ -35,6 +35,7 @@ class TlsCertificateManagerTest {
         }
 
         val first = TlsCertificateManager(context, preferences).prepare("192.168.1.5")
+        // A new manager exercises loading the persisted PKCS12 instead of the in-memory cache.
         val second = TlsCertificateManager(context, preferences).prepare("192.168.1.5")
 
         assertEquals(first.fingerprint, second.fingerprint)
