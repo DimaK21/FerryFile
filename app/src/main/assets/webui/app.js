@@ -511,6 +511,19 @@
 
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
 
+  function openFilePicker() {
+    uploadInput.click();
+  }
+
+  dropZoneEl.addEventListener('click', openFilePicker);
+
+  dropZoneEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openFilePicker();
+    }
+  });
+
   dropZoneEl.addEventListener('dragover', function (e) {
     e.preventDefault();
     dropZoneEl.classList.add('drag-over');
