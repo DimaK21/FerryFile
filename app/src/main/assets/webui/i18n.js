@@ -51,7 +51,10 @@
         upload_error_details: 'Upload error: {message}',
         transfer_in_progress: 'A transfer is already in progress',
         open_folder_first: 'Open a folder first — the home screen only lists shared folders',
-        transfer_error: 'Transfer error'
+        transfer_error: 'Transfer error',
+        dateline_shared: '{folders} shared folders · {items} items',
+        col_name: 'Name',
+        col_meta: 'Size · Modified'
       },
       units: {
         bytes: 'B',
@@ -117,7 +120,10 @@
         upload_error_details: 'Ошибка отправки: {message}',
         transfer_in_progress: 'Передача уже выполняется',
         open_folder_first: 'Сначала откройте папку — на главном экране отображаются только общие папки',
-        transfer_error: 'Ошибка передачи'
+        transfer_error: 'Ошибка передачи',
+        dateline_shared: '{folders} общих папок · {items} элементов',
+        col_name: 'Имя',
+        col_meta: 'Размер · Изменён'
       },
       units: {
         bytes: 'Б',
