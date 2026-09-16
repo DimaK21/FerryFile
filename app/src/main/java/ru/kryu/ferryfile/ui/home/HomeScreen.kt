@@ -1,5 +1,7 @@
 package ru.kryu.ferryfile.ui.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,45 +13,39 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.kryu.ferryfile.R
+import ru.kryu.ferryfile.ui.theme.BroadsheetTheme
+import ru.kryu.ferryfile.ui.theme.BroadsheetType
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
     onNavigateToSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = BroadsheetTheme.colors
 
     // Re-read the server state every time this screen comes back to the foreground, not just
     // once per composition: the server can be stopped from outside the app (the notification's
@@ -62,183 +58,292 @@ fun HomeScreen(
     Scaffold(
         // Отступы системных панелей уже заданы в AppNavigation, Scaffold их не добавляет.
         contentWindowInsets = WindowInsets(0),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.brand_name),
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_settings),
-                            contentDescription = stringResource(R.string.home_settings_content_description)
-                        )
-                    }
-                }
-            )
-        }
+        containerColor = colors.bg
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 20.dp)
         ) {
-            if (!uiState.hasSharedFolders) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Masthead row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = stringResource(R.string.brand_name),
+                        style = BroadsheetType.masthead,
+                        color = colors.text
+                    )
+                    IconButton(onClick = onNavigateToSettings, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = stringResource(R.string.home_settings_content_description),
+                            tint = colors.text,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                val isNoWifi = uiState.isRunning && !uiState.hasWifi
+                // Only known while running: HomeUiState carries the live server URL, not the
+                // configured port (HomeViewModel.kt is off-limits for this restyle).
+                val port = remember(uiState.url) {
+                    Regex(""":(\d+)$""").find(uiState.url)?.groupValues?.get(1)
+                }
+
+                // Head pair: thick rule, dateline row, thin rule.
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(colors.text)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (isNoWifi) {
+                            stringResource(R.string.home_dateline_no_network)
+                        } else {
+                            stringResource(R.string.home_dateline_network, port ?: "—")
+                        }.uppercase(),
+                        style = BroadsheetType.smallCapsLabel,
+                        color = if (isNoWifi) colors.accent2700 else colors.neutral700
+                    )
+                    Text(
+                        text = when {
+                            uiState.isStarting -> stringResource(R.string.home_status_starting)
+                            uiState.isRunning -> stringResource(R.string.home_status_running)
+                            else -> stringResource(R.string.home_status_stopped)
+                        }.uppercase(),
+                        style = BroadsheetType.smallCapsLabel,
+                        color = if (uiState.isRunning || uiState.isStarting) colors.accent700 else colors.neutral700
+                    )
+                }
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(colors.text)
+                )
+
+                if (uiState.isStarting) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp),
+                        color = colors.accent,
+                        trackColor = colors.neutral300
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(30.dp))
+
+                // Headline + standfirst
+                if (isNoWifi) {
+                    val fullText = stringResource(R.string.home_no_wifi_connection)
+                    val dashIndex = fullText.indexOf('—')
+                    val headlineText = if (dashIndex >= 0) fullText.substring(0, dashIndex).trim() else fullText
+                    val standfirstText = if (dashIndex >= 0) fullText.substring(dashIndex + 1).trim() else ""
+
+                    Text(text = headlineText, style = BroadsheetType.headline(), color = colors.accent2700)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(text = standfirstText, style = BroadsheetType.standfirst, color = colors.accent2700)
+                } else {
+                    val headlineText = when {
+                        uiState.isStarting -> stringResource(R.string.home_status_starting)
+                        uiState.isRunning -> stringResource(R.string.home_headline_running)
+                        else -> stringResource(R.string.home_headline_stopped)
+                    }
+                    Text(
+                        text = headlineText,
+                        style = BroadsheetType.headline(),
+                        color = if (uiState.isStarting) colors.neutral700 else colors.text
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    val standfirstText = when {
+                        uiState.isStarting -> stringResource(R.string.home_starting_standfirst)
+                        uiState.isRunning -> stringResource(R.string.home_running_standfirst)
+                        else -> stringResource(R.string.home_stopped_standfirst)
+                    }
+                    Text(text = standfirstText, style = BroadsheetType.standfirst, color = colors.neutral800)
+                }
+
+                // Connection block (running + Wi-Fi) / no-Wi-Fi block (running, no Wi-Fi)
+                if (uiState.isRunning) {
+                    Spacer(modifier = Modifier.height(30.dp))
+                    if (uiState.hasWifi) {
+                        Text(
+                            text = stringResource(R.string.home_open_in_browser),
+                            style = BroadsheetType.smallCapsLabel,
+                            color = colors.neutral700
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = uiState.url, style = BroadsheetType.address, color = colors.accent700)
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = stringResource(R.string.home_pin),
+                            style = BroadsheetType.smallCapsLabel,
+                            color = colors.neutral700
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = uiState.pin, style = BroadsheetType.pin, color = colors.text)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .background(colors.accent)
+                        )
+
+                        if (uiState.certificateFingerprint.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Text(
+                                text = stringResource(R.string.home_certificate_fingerprint),
+                                style = BroadsheetType.smallCapsLabel,
+                                color = colors.neutral700
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = uiState.certificateFingerprint,
+                                style = BroadsheetType.fingerprint,
+                                color = colors.text
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.home_certificate_hint),
+                                style = BroadsheetType.fingerprint,
+                                color = colors.neutral700
+                            )
+                        }
+                    } else {
+                        Spacer(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(colors.accent2700)
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = stringResource(R.string.home_address_label),
+                            style = BroadsheetType.smallCapsLabel,
+                            color = colors.neutral700
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.home_address_unavailable),
+                            style = BroadsheetType.address,
+                            color = colors.neutral600
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = stringResource(R.string.home_pin),
+                            style = BroadsheetType.smallCapsLabel,
+                            color = colors.neutral700
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = uiState.pin, style = BroadsheetType.pinSmall, color = colors.text)
+                    }
+                }
+
+                // Notice block
+                if (!uiState.hasSharedFolders) {
+                    Spacer(modifier = Modifier.height(30.dp))
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(colors.text)
+                    )
+                    Column(modifier = Modifier.padding(vertical = 14.dp)) {
+                        Text(
+                            text = stringResource(R.string.home_notice_kicker).uppercase(),
+                            style = BroadsheetType.smallCapsLabel,
+                            color = colors.accent2700
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = stringResource(R.string.home_no_folders_shared_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                            style = BroadsheetType.sectionHeading,
+                            color = colors.text
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = stringResource(R.string.home_no_folders_shared_message),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                            style = BroadsheetType.listRowValue,
+                            color = colors.text
                         )
-                        TextButton(onClick = onNavigateToSettings) {
-                            Text(stringResource(R.string.home_add_folder))
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            Button(
-                onClick = {
-                    if (uiState.isRunning) viewModel.onStopClicked() else viewModel.onStartClicked()
-                },
-                enabled = !uiState.isStarting,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(
-                        if (uiState.isRunning) R.string.home_stop_server else R.string.home_start_server
-                    )
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Surface(
-                    modifier = Modifier.size(12.dp),
-                    shape = CircleShape,
-                    color = if (uiState.isRunning) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
-                ) {}
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    text = when {
-                        uiState.isStarting -> stringResource(R.string.home_status_starting)
-                        uiState.isRunning -> stringResource(R.string.home_status_running)
-                        else -> stringResource(R.string.home_status_stopped)
-                    },
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (uiState.isRunning) {
-                if (uiState.hasWifi) {
-                     ConnectionCard(
-                         url = uiState.url,
-                         pin = uiState.pin,
-                         fingerprint = uiState.certificateFingerprint
-                     )
-                } else {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = stringResource(R.string.home_no_wifi_connection),
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                            text = stringResource(R.string.home_add_folder) + " →",
+                            style = BroadsheetType.buttonLabel,
+                            color = colors.accent,
+                            modifier = Modifier.clickable(onClick = onNavigateToSettings)
                         )
                     }
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(colors.divider)
+                    )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
-
-@Composable
-private fun ConnectionCard(url: String, pin: String, fingerprint: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = stringResource(R.string.home_open_in_browser),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = url,
-                style = MaterialTheme.typography.headlineSmall,
-                fontFamily = FontFamily.Monospace
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = stringResource(R.string.home_pin),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = pin,
-                style = MaterialTheme.typography.displaySmall,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 6.sp
-            )
-            if (fingerprint.isNotBlank()) {
                 Spacer(modifier = Modifier.height(20.dp))
+            }
+
+            // Action, pinned to the bottom
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(colors.divider)
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Button(
+                onClick = { if (uiState.isRunning) viewModel.onStopClicked() else viewModel.onStartClicked() },
+                enabled = !uiState.isStarting,
+                shape = RoundedCornerShape(2.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.accent,
+                    contentColor = colors.bg,
+                    disabledContainerColor = colors.accent,
+                    disabledContentColor = colors.bg
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                val runningLabel = if (uiState.isRunning) {
+                    stringResource(R.string.home_stop_server)
+                } else {
+                    stringResource(R.string.home_start_server)
+                }
+                val displayLabel = if (uiState.isStarting) stringResource(R.string.home_status_starting) else runningLabel
                 Text(
-                    text = stringResource(R.string.home_certificate_fingerprint),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = fingerprint,
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.home_certificate_hint),
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    text = displayLabel,
+                    style = BroadsheetType.buttonLabel,
+                    modifier = if (uiState.isStarting) Modifier.alpha(0.45f) else Modifier
                 )
             }
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }
