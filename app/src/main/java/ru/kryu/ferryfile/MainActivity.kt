@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val darkTheme by observeDarkTheme().collectAsStateWithLifecycle()
-            FerryFileTheme(darkTheme = darkTheme, dynamicColor = false) {
+            FerryFileTheme(darkTheme = darkTheme) {
                 AppNavigation()
             }
         }
