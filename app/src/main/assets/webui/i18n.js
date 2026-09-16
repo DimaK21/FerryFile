@@ -5,6 +5,10 @@
   var translations = {
     en: {
       brand: 'FerryFile',
+      common: {
+        dateline_network: 'Local network',
+        dateline_port: 'Port {port}'
+      },
       language: {
         switch_to: 'Русский',
         switch_aria_label: 'Switch to Russian'
@@ -19,7 +23,8 @@
         too_many_attempts: 'Too many attempts, wait 30s',
         wrong_pin: 'Wrong PIN',
         unexpected_error: 'Unexpected error, please try again',
-        network_error: 'Network error, please try again'
+        network_error: 'Network error, please try again',
+        privacy_note: 'Nothing leaves your Wi-Fi network.'
       },
       files: {
         title: 'FerryFile',
@@ -66,6 +71,10 @@
     },
     ru: {
       brand: 'FerryFile',
+      common: {
+        dateline_network: 'Локальная сеть',
+        dateline_port: 'Порт {port}'
+      },
       language: {
         switch_to: 'English',
         switch_aria_label: 'Переключить на английский'
@@ -80,7 +89,8 @@
         too_many_attempts: 'Слишком много попыток, подождите 30 секунд',
         wrong_pin: 'Неверный PIN',
         unexpected_error: 'Произошла ошибка, попробуйте ещё раз',
-        network_error: 'Ошибка сети, попробуйте ещё раз'
+        network_error: 'Ошибка сети, попробуйте ещё раз',
+        privacy_note: 'Ничего не покидает вашу сеть Wi-Fi.'
       },
       files: {
         title: 'FerryFile',

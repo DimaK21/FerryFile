@@ -7,17 +7,25 @@
   <link rel="stylesheet" href="/webui/style.css" />
 </head>
 <body>
-  <div class="login-wrapper">
-    <div class="login-card">
-      <div class="language-switcher">
+  <div class="page">
+    <div class="login-block">
+      <div class="login-top">
         <button
           type="button"
-          class="btn btn-secondary language-toggle"
+          class="ghost-btn language-toggle"
           id="language-toggle"
           data-i18n="language.switch_to"
           data-i18n-aria-label="language.switch_aria_label"
         ></button>
       </div>
+
+      <div class="dateline-rule dateline-rule-thick"></div>
+      <div class="dateline-row">
+        <span data-i18n="common.dateline_network"></span>
+        <span id="dateline-port"></span>
+      </div>
+      <div class="dateline-rule"></div>
+
       <h1 data-i18n="brand"></h1>
       <p class="subtitle" data-i18n="login.subtitle"></p>
 
@@ -33,17 +41,34 @@
             autocomplete="off"
             autofocus
             required
+            class="pin-input"
           />
         </div>
 
-        <button type="submit" class="btn btn-primary" id="submit-btn" data-i18n="login.unlock"></button>
+        <button type="submit" class="btn-filled" id="submit-btn" data-i18n="login.unlock"></button>
       </form>
 
-      <div id="error-msg" class="message error" role="alert"></div>
+      <div id="error-msg" class="error-msg" role="alert"></div>
+
+      <p class="privacy-note" data-i18n="login.privacy_note"></p>
     </div>
   </div>
 
   <script src="/webui/i18n.js"></script>
+  <script>
+    (function () {
+      var i18n = window.FerryFileI18n;
+      var portEl = document.getElementById('dateline-port');
+
+      function renderPort() {
+        var port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+        portEl.textContent = i18n.t('common.dateline_port', { port: port });
+      }
+
+      renderPort();
+      document.addEventListener('ferryfile-language-change', renderPort);
+    })();
+  </script>
   <script>
     (function () {
       var i18n = window.FerryFileI18n;
