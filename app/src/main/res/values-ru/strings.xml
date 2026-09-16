@@ -31,4 +31,16 @@
     <string name="notification_channel_name">Сервер FerryFile</string>
     <string name="notification_no_wifi_connection">Нет подключения к Wi-Fi</string>
     <string name="notification_stop">Остановить</string>
+    <string name="home_dateline_network">Локальный Wi-Fi · порт %1$s</string>
+    <string name="home_dateline_no_network">Нет сети</string>
+    <string name="home_headline_running">Сервер работает</string>
+    <string name="home_headline_stopped">Сервер остановлен</string>
+    <string name="home_running_standfirst">Введите адрес в браузере на том же Wi-Fi, затем шестизначный PIN.</string>
+    <string name="home_stopped_standfirst">Запустите сервер, чтобы получить адрес и PIN для компьютера.</string>
+    <string name="home_starting_standfirst">Поднимаем сервер и выдаём PIN.</string>
+    <string name="home_notice_kicker">Важно</string>
+    <string name="home_address_label">Адрес</string>
+    <string name="home_address_unavailable">недоступен</string>
+    <string name="settings_switch_on">Вкл</string>
+    <string name="settings_switch_off">Выкл</string>
 </resources>

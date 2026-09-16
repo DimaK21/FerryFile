@@ -31,4 +31,16 @@
     <string name="notification_channel_name">FerryFile Server</string>
     <string name="notification_no_wifi_connection">No Wi-Fi connection</string>
     <string name="notification_stop">Stop</string>
+    <string name="home_dateline_network">Local Wi-Fi · Port %1$s</string>
+    <string name="home_dateline_no_network">No network</string>
+    <string name="home_headline_running">Server running</string>
+    <string name="home_headline_stopped">Server stopped</string>
+    <string name="home_running_standfirst">Type the address into any browser on the same network, then enter the six-digit PIN.</string>
+    <string name="home_stopped_standfirst">Start the server to hand the address and PIN to your computer.</string>
+    <string name="home_starting_standfirst">Bringing the server up and issuing a PIN.</string>
+    <string name="home_notice_kicker">Notice</string>
+    <string name="home_address_label">Address</string>
+    <string name="home_address_unavailable">unavailable</string>
+    <string name="settings_switch_on">On</string>
+    <string name="settings_switch_off">Off</string>
 </resources>
