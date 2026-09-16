@@ -459,6 +459,7 @@ button:disabled {
   flex: none;
   accent-color: var(--color-accent);
   cursor: pointer;
+  margin-right: 13px;
 }
 
 .file-name-btn {
