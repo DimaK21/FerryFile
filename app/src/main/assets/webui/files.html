@@ -50,13 +50,8 @@
       data-i18n-aria-label="files.file_path"
     ></nav>
 
-    <!-- Toolbar -->
-    <div class="toolbar">
-      <label class="btn-outline" id="upload-label">
-        <span data-i18n="files.upload_files"></span>
-        <input type="file" id="upload-input" multiple style="display:none" />
-      </label>
-    </div>
+    <!-- The file picker is opened by the drag-and-drop zone. -->
+    <input type="file" id="upload-input" multiple hidden />
 
     <p class="root-hint" id="root-hint" hidden>
       <span data-i18n="files.root_hint"></span>

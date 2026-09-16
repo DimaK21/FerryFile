@@ -271,7 +271,6 @@
 
   function applyUploadVisibility(path) {
     var atRoot = path === '/';
-    document.getElementById('upload-label').hidden = atRoot;
     dropZoneEl.hidden = atRoot;
     rootHintEl.hidden = !atRoot;
   }

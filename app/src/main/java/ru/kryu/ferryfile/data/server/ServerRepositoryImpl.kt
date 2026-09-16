@@ -59,12 +59,10 @@ open class ServerRepositoryImpl @Inject constructor(
             // Generate/load the certificate before dispatching the service. Apart from keeping
             // RSA work off the service's main thread, this guarantees that the state fingerprint
             // belongs to the exact keystore the server will use.
-            val certificateFingerprint = if (useHttps) {
+            if (useHttps) {
                 withContext(Dispatchers.IO) {
-                    server.prepareTls(resolvedAddress?.host).orEmpty()
+                    server.prepareTls(resolvedAddress?.host)
                 }
-            } else {
-                ""
             }
             launchService(
                 action = FileServerService.ACTION_START,
@@ -75,13 +73,8 @@ open class ServerRepositoryImpl @Inject constructor(
             )
             activeUseHttps = useHttps
             activePort = port
-            // Re-read the current PIN rather than trusting a value captured before the suspending
-            // address() lookup. Nothing can revoke it while the mutex is held, but publishing
-            // whatever is actually current (and failing closed if it is somehow gone) is cheap
-            // insurance against ever showing a PIN that verify() would reject.
-            _state.value = accessCodes.current?.let {
-                ServerState.Running(resolvedAddress, it, certificateFingerprint)
-            } ?: ServerState.Stopped
+            // The service publishes Running after Netty has actually bound the socket. Until
+            // then the UI stays in Starting and cannot expose an address/PIN for a failed start.
             published = true
         } finally {
             if (!published) {

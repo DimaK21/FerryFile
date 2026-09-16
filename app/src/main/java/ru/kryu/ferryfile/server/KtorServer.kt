@@ -77,39 +77,47 @@ class KtorServer @Inject constructor(
                 configureSseRoutes(transferProgress)
             }
 
-            // Keep the engine assignment and bind operation together. If the service is
-            // destroyed while starting, cancellation must not leave an untracked Netty engine.
-            withContext(NonCancellable + Dispatchers.IO) {
-                engine = if (useHttps) {
-                    val tls = synchronized(this@KtorServer) {
-                        preparedTls ?: tlsCertificateManager.prepare(host).also { preparedTls = it }
-                    }
-                    embeddedServer(
-                        Netty,
-                        configure = {
-                            enableHttp2 = false
-                            sslConnector(
-                                keyStore = tls.keyStore,
-                                keyAlias = tls.keyAlias,
-                                keyStorePassword = { tls.password.toCharArray() },
-                                privateKeyPassword = { tls.password.toCharArray() }
-                            ) {
-                                this.host = "0.0.0.0"
-                                this.port = port
-                                enabledProtocols = listOf("TLSv1.2", "TLSv1.3")
-                            }
-                        },
-                        module = module
-                    )
-                } else {
-                    synchronized(this@KtorServer) { preparedTls = null }
-                    embeddedServer(
-                        Netty,
-                        port = port,
-                        host = "0.0.0.0",
-                        module = module
-                    )
-                }.start(wait = false)
+            // Netty start must stay on the service command dispatcher. On Android, wrapping it
+            // in NonCancellable + Dispatchers.IO can leave startup suspended after the socket is
+            // bound while this mutex remains held, making a user-initiated stop wait forever.
+            val newEngine = if (useHttps) {
+                val tls = synchronized(this@KtorServer) {
+                    preparedTls ?: tlsCertificateManager.prepare(host).also { preparedTls = it }
+                }
+                embeddedServer(
+                    Netty,
+                    configure = {
+                        enableHttp2 = false
+                        sslConnector(
+                            keyStore = tls.keyStore,
+                            keyAlias = tls.keyAlias,
+                            keyStorePassword = { tls.password.toCharArray() },
+                            privateKeyPassword = { tls.password.toCharArray() }
+                        ) {
+                            this.host = "0.0.0.0"
+                            this.port = port
+                            enabledProtocols = listOf("TLSv1.2", "TLSv1.3")
+                        }
+                    },
+                    module = module
+                )
+            } else {
+                synchronized(this@KtorServer) { preparedTls = null }
+                embeddedServer(
+                    Netty,
+                    port = port,
+                    host = "0.0.0.0",
+                    module = module
+                )
+            }
+
+            try {
+                engine = newEngine.start(wait = false)
+            } catch (cause: Throwable) {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    runCatching { newEngine.stop(gracePeriodMillis = 0, timeoutMillis = 1_000) }
+                }
+                throw cause
             }
     }
 

@@ -18,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import ru.kryu.ferryfile.R
 import ru.kryu.ferryfile.domain.repository.ServerRepository
@@ -116,9 +117,9 @@ class FileServerService : Service() {
     override fun onDestroy() {
         commands.close()
         serviceScope.cancel()
-        // onDestroy runs on the service main thread. Keep the final engine shutdown off it even
-        // when the service is removed by the system rather than by our Stop command.
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        // Do not return from onDestroy until the engine is closed. A detached coroutine can be
+        // killed with the process immediately after the service teardown callback returns.
+        runBlocking(Dispatchers.IO) {
             try {
                 ktorServer.stop()
             } catch (cause: Exception) {

@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,6 +45,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -87,29 +90,29 @@ fun SettingsScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNavigateBack, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_back),
+                        contentDescription = stringResource(R.string.settings_back_content_description),
+                        tint = colors.text,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(text = stringResource(R.string.settings_title), style = BroadsheetType.screenTitle, color = colors.text)
+            }
+
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back),
-                            contentDescription = stringResource(R.string.settings_back_content_description),
-                            tint = colors.text,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(text = stringResource(R.string.settings_title), style = BroadsheetType.screenTitle, color = colors.text)
-                }
-
                 Spacer(modifier = Modifier.height(20.dp))
                 Spacer(modifier = Modifier.fillMaxWidth().height(3.dp).background(colors.text))
                 Spacer(modifier = Modifier.height(4.dp))
@@ -174,18 +177,23 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                        Text(text = stringResource(R.string.settings_use_https), style = BroadsheetType.sectionHeading, color = colors.text)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.settings_use_https_description),
-                            fontFamily = SourceSerif4,
-                            fontSize = 13.sp,
-                            color = colors.neutral700
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.settings_use_https),
+                        style = BroadsheetType.sectionHeading,
+                        color = colors.text,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
                     SegmentedToggle(checked = uiState.useHttps, onCheckedChange = { viewModel.onHttpsChanged(it) })
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.settings_use_https_description),
+                    fontFamily = SourceSerif4,
+                    fontSize = 13.sp,
+                    color = colors.neutral700,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Spacer(modifier = Modifier.height(18.dp))
                 Spacer(modifier = Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
@@ -235,13 +243,19 @@ fun SettingsScreen(
                                 color = colors.text,
                                 modifier = Modifier.weight(1f)
                             )
-                            Text(
-                                text = stringResource(R.string.settings_remove),
-                                fontFamily = SourceSerif4,
-                                fontSize = 13.sp,
-                                color = colors.accent2700,
-                                modifier = Modifier.clickable { viewModel.onFolderRemoved(folder.uri) }
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .clickable(role = Role.Button) { viewModel.onFolderRemoved(folder.uri) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.settings_remove),
+                                    fontFamily = SourceSerif4,
+                                    fontSize = 13.sp,
+                                    color = colors.accent2700
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
                     }
@@ -285,7 +299,9 @@ private fun SegmentedToggle(
     val colors = BroadsheetTheme.colors
     Row(
         modifier = modifier
+            .width(120.dp)
             .height(48.dp)
+            .selectableGroup()
             .border(1.dp, colors.divider, RoundedCornerShape(2.dp))
     ) {
         SegmentOption(
@@ -323,7 +339,7 @@ private fun SegmentOption(
         modifier = modifier
             .fillMaxHeight()
             .background(if (selected) colors.accent else Color.Transparent)
-            .clickable(onClick = onClick)
+            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {

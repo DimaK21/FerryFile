@@ -163,6 +163,22 @@ class ServerRepositoryImplTest {
     }
 
     @Test
+    fun `start stays Starting until the service confirms that the engine is running`() = runTest {
+        whenever(settings.port).thenReturn(MutableStateFlow(Port.DEFAULT))
+        whenever(settings.useHttps).thenReturn(MutableStateFlow(false))
+        whenever(server.isRunning).thenReturn(false)
+
+        val repo = repo(
+            network = SequenceNetworkRepository(mutableListOf("10.0.0.5")),
+            accessCodes = InMemoryAccessCodeRepository()
+        )
+
+        repo.start()
+
+        assertEquals(ServerState.Starting, repo.state.value)
+    }
+
+    @Test
     fun `stop waits for the engine shutdown before publishing stopped`() = runTest {
         whenever(server.stop()).thenReturn(Unit)
 

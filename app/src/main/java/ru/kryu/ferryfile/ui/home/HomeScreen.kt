@@ -3,6 +3,7 @@ package ru.kryu.ferryfile.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -66,34 +68,34 @@ fun HomeScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp)
         ) {
+            // Masthead toolbar stays visible while the page content scrolls.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(R.string.brand_name),
+                    style = BroadsheetType.masthead,
+                    color = colors.text
+                )
+                IconButton(onClick = onNavigateToSettings, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_settings),
+                        contentDescription = stringResource(R.string.home_settings_content_description),
+                        tint = colors.text,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Masthead row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = stringResource(R.string.brand_name),
-                        style = BroadsheetType.masthead,
-                        color = colors.text
-                    )
-                    IconButton(onClick = onNavigateToSettings, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_settings),
-                            contentDescription = stringResource(R.string.home_settings_content_description),
-                            tint = colors.text,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(20.dp))
 
                 val isNoWifi = uiState.isRunning && !uiState.hasWifi
@@ -291,12 +293,19 @@ fun HomeScreen(
                             color = colors.text
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.home_add_folder) + " →",
-                            style = BroadsheetType.buttonLabel,
-                            color = colors.accent,
-                            modifier = Modifier.clickable(onClick = onNavigateToSettings)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .clickable(role = Role.Button, onClick = onNavigateToSettings),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_add_folder) + " →",
+                                style = BroadsheetType.buttonLabel,
+                                color = colors.accent
+                            )
+                        }
                     }
                     Spacer(
                         modifier = Modifier
