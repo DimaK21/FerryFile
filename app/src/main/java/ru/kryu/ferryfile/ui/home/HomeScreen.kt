@@ -1,5 +1,10 @@
 package ru.kryu.ferryfile.ui.home
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,14 +30,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -48,6 +58,32 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = BroadsheetTheme.colors
+    val context = LocalContext.current
+    var startAfterNotificationPermission by rememberSaveable { mutableStateOf(false) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted && startAfterNotificationPermission) {
+            viewModel.onStartClicked()
+        }
+        startAfterNotificationPermission = false
+    }
+
+    fun startServer() {
+        val needsNotificationPermission =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+
+        if (needsNotificationPermission) {
+            startAfterNotificationPermission = true
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.onStartClicked()
+        }
+    }
 
     // Re-read the server state every time this screen comes back to the foreground, not just
     // once per composition: the server can be stopped from outside the app (the notification's
@@ -327,7 +363,7 @@ fun HomeScreen(
             )
             Spacer(modifier = Modifier.height(14.dp))
             Button(
-                onClick = { if (uiState.isRunning) viewModel.onStopClicked() else viewModel.onStartClicked() },
+                onClick = { if (uiState.isRunning) viewModel.onStopClicked() else startServer() },
                 enabled = !uiState.isStarting,
                 shape = RoundedCornerShape(2.dp),
                 colors = ButtonDefaults.buttonColors(
