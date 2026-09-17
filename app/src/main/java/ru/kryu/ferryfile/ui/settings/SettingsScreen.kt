@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -68,6 +69,8 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = BroadsheetTheme.colors
     val isRussian = LocalConfiguration.current.locales[0].language == "ru"
+    val uriHandler = LocalUriHandler.current
+    val privacyPolicyUrl = stringResource(R.string.privacy_policy_url)
 
     var portText by remember(uiState.port) { mutableStateOf(uiState.port.toString()) }
 
@@ -274,17 +277,29 @@ fun SettingsScreen(
                 }
             }
 
-            Text(
-                text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME).uppercase(),
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 16.dp),
-                textAlign = TextAlign.Center,
-                fontFamily = SourceSerif4,
-                fontSize = 11.sp,
-                letterSpacing = 0.1.em,
-                color = colors.neutral600
-            )
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME).uppercase(),
+                    textAlign = TextAlign.Center,
+                    style = BroadsheetType.footer,
+                    color = colors.neutral600
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.settings_privacy_policy),
+                    modifier = Modifier
+                        .clickable { uriHandler.openUri(privacyPolicyUrl) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    textAlign = TextAlign.Center,
+                    style = BroadsheetType.footer,
+                    color = colors.accent700
+                )
+            }
         }
     }
 }

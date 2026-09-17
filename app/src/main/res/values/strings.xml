@@ -28,6 +28,8 @@
     <string name="settings_remove">Remove</string>
     <string name="settings_add_folder">Add Folder</string>
     <string name="settings_version">Version %1$s</string>
+    <string name="settings_privacy_policy">Privacy Policy</string>
+    <string name="privacy_policy_url" translatable="false">https://doc-hosting.flycricket.io/ferry-file-privacy-policy/a13d0275-4bdf-427a-a1ff-f79587a91ecf/privacy</string>
     <string name="notification_channel_name">FerryFile Server</string>
     <string name="notification_no_wifi_connection">No Wi-Fi connection</string>
     <string name="notification_stop">Stop</string>

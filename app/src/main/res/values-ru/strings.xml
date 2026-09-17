@@ -28,6 +28,7 @@
     <string name="settings_remove">Удалить</string>
     <string name="settings_add_folder">Добавить папку</string>
     <string name="settings_version">Версия %1$s</string>
+    <string name="settings_privacy_policy">Политика конфиденциальности</string>
     <string name="notification_channel_name">Сервер FerryFile</string>
     <string name="notification_no_wifi_connection">Нет подключения к Wi-Fi</string>
     <string name="notification_stop">Остановить</string>
