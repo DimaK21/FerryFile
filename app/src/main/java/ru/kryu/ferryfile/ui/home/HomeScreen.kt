@@ -166,11 +166,12 @@ fun HomeScreen(
                     Text(
                         text = when {
                             uiState.isStarting -> stringResource(R.string.home_status_starting)
+                            uiState.isStopping -> stringResource(R.string.home_status_stopping)
                             uiState.isRunning -> stringResource(R.string.home_status_running)
                             else -> stringResource(R.string.home_status_stopped)
                         }.uppercase(),
                         style = BroadsheetType.smallCapsLabel,
-                        color = if (uiState.isRunning || uiState.isStarting) colors.accent700 else colors.neutral700
+                        color = if (uiState.isRunning || uiState.isBusy) colors.accent700 else colors.neutral700
                     )
                 }
                 Spacer(
@@ -180,7 +181,7 @@ fun HomeScreen(
                         .background(colors.text)
                 )
 
-                if (uiState.isStarting) {
+                if (uiState.isBusy) {
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -205,17 +206,19 @@ fun HomeScreen(
                 } else {
                     val headlineText = when {
                         uiState.isStarting -> stringResource(R.string.home_status_starting)
+                        uiState.isStopping -> stringResource(R.string.home_status_stopping)
                         uiState.isRunning -> stringResource(R.string.home_headline_running)
                         else -> stringResource(R.string.home_headline_stopped)
                     }
                     Text(
                         text = headlineText,
                         style = BroadsheetType.headline(),
-                        color = if (uiState.isStarting) colors.neutral700 else colors.text
+                        color = if (uiState.isBusy) colors.neutral700 else colors.text
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     val standfirstText = when {
                         uiState.isStarting -> stringResource(R.string.home_starting_standfirst)
+                        uiState.isStopping -> stringResource(R.string.home_stopping_standfirst)
                         uiState.isRunning -> stringResource(R.string.home_running_standfirst)
                         else -> stringResource(R.string.home_stopped_standfirst)
                     }
@@ -363,8 +366,13 @@ fun HomeScreen(
             )
             Spacer(modifier = Modifier.height(14.dp))
             Button(
-                onClick = { if (uiState.isRunning) viewModel.onStopClicked() else startServer() },
-                enabled = !uiState.isStarting,
+                onClick = {
+                    when {
+                        uiState.isRunning -> viewModel.onStopClicked()
+                        !uiState.isBusy -> startServer()
+                    }
+                },
+                enabled = !uiState.isBusy,
                 shape = RoundedCornerShape(2.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = colors.accent,
@@ -376,16 +384,16 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                val runningLabel = if (uiState.isRunning) {
-                    stringResource(R.string.home_stop_server)
-                } else {
-                    stringResource(R.string.home_start_server)
+                val displayLabel = when {
+                    uiState.isStarting -> stringResource(R.string.home_status_starting)
+                    uiState.isStopping -> stringResource(R.string.home_status_stopping)
+                    uiState.isRunning -> stringResource(R.string.home_stop_server)
+                    else -> stringResource(R.string.home_start_server)
                 }
-                val displayLabel = if (uiState.isStarting) stringResource(R.string.home_status_starting) else runningLabel
                 Text(
                     text = displayLabel,
                     style = BroadsheetType.buttonLabel,
-                    modifier = if (uiState.isStarting) Modifier.alpha(0.45f) else Modifier
+                    modifier = if (uiState.isBusy) Modifier.alpha(0.45f) else Modifier
                 )
             }
             Spacer(modifier = Modifier.height(20.dp))

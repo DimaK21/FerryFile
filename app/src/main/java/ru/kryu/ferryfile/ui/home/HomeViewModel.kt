@@ -19,12 +19,15 @@ import javax.inject.Inject
 data class HomeUiState(
     val isRunning: Boolean = false,
     val isStarting: Boolean = false,
+    val isStopping: Boolean = false,
     val url: String = "",
     val pin: String = "",
     val certificateFingerprint: String = "",
     val hasWifi: Boolean = true,
     val hasSharedFolders: Boolean = true
-)
+) {
+    val isBusy: Boolean get() = isStarting || isStopping
+}
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -41,6 +44,10 @@ class HomeViewModel @Inject constructor(
                 is ServerState.Stopped -> HomeUiState(hasSharedFolders = folders.isNotEmpty())
                 is ServerState.Starting -> HomeUiState(
                     isStarting = true,
+                    hasSharedFolders = folders.isNotEmpty()
+                )
+                is ServerState.Stopping -> HomeUiState(
+                    isStopping = true,
                     hasSharedFolders = folders.isNotEmpty()
                 )
                 is ServerState.Running -> HomeUiState(

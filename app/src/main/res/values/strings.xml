@@ -8,6 +8,7 @@
     <string name="home_start_server">Start Server</string>
     <string name="home_stop_server">Stop Server</string>
     <string name="home_status_starting">Starting…</string>
+    <string name="home_status_stopping">Stopping…</string>
     <string name="home_status_running">Running</string>
     <string name="home_status_stopped">Stopped</string>
     <string name="home_no_wifi_connection">No Wi-Fi connection — connect this phone to the same network as your computer.</string>
@@ -40,6 +41,7 @@
     <string name="home_running_standfirst">Type the address into any browser on the same network, then enter the six-digit PIN.</string>
     <string name="home_stopped_standfirst">Start the server to hand the address and PIN to your computer.</string>
     <string name="home_starting_standfirst">Bringing the server up and issuing a PIN.</string>
+    <string name="home_stopping_standfirst">Shutting down the server.</string>
     <string name="home_notice_kicker">Notice</string>
     <string name="home_address_label">Address</string>
     <string name="home_address_unavailable">unavailable</string>
