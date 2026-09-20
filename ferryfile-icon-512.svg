@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>FerryFile app icon</title>
+  <rect width="512" height="512" fill="#1565C0"/>
+
+  <!-- File document with a folded corner. -->
+  <path
+    d="M160 85h133l57 57v256q0 19-19 19H160q-19 0-19-19V104q0-19 19-19Z"
+    fill="#FFFFFF"/>
+  <path d="M293 85v57h57Z" fill="#BBDEFB"/>
+
+  <!-- Upload arrow. -->
+  <path d="M228 341v-76h-24l52-67 52 67h-24v76Z" fill="#1565C0"/>
+
+  <!-- Wireless transfer signal. -->
+  <path
+    d="M379 198a85 85 0 0 1 0 116"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="16"
+    stroke-linecap="round"/>
+  <path
+    d="M407 170a128 128 0 0 1 0 172"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="16"
+    stroke-linecap="round"/>
+</svg>
