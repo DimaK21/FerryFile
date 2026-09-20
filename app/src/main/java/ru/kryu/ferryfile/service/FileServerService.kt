@@ -20,6 +20,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import ru.kryu.ferryfile.R
 import ru.kryu.ferryfile.domain.repository.ServerRepository
 import ru.kryu.ferryfile.domain.repository.SettingsRepository
@@ -42,6 +43,13 @@ class FileServerService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val commands = Channel<ServerCommand>(Channel.UNLIMITED)
+
+    // Set from the moment ACTION_STOP is accepted until a fresh ACTION_START is accepted:
+    // not just a duplicate-click guard — after a stop, KtorServer.isRunning flips to false
+    // *before* the blocking shutdown returns, so a Start still queued in `commands` could
+    // otherwise pass the isRunning check and resurrect the server mid-stop.
+    @Volatile
+    private var stopRequested = false
 
     private sealed interface ServerCommand {
         data class Start(
@@ -100,6 +108,7 @@ class FileServerService : Service() {
                     serviceScope.launch { refreshAndStop(startId) }
                     return START_NOT_STICKY
                 }
+                stopRequested = false
                 commands.trySend(
                     ServerCommand.Start(
                         port = port,
@@ -109,7 +118,10 @@ class FileServerService : Service() {
                     )
                 )
             }
-            ACTION_STOP -> commands.trySend(ServerCommand.Stop(startId))
+            ACTION_STOP -> {
+                stopRequested = true
+                commands.trySend(ServerCommand.Stop(startId))
+            }
         }
         return START_NOT_STICKY
     }
@@ -125,6 +137,12 @@ class FileServerService : Service() {
             } catch (cause: Exception) {
                 Log.e(LOG_TAG, "Failed to stop server during service teardown", cause)
             }
+            // Best-effort reconciliation so the UI is not left showing Running/Stopping after an
+            // abnormal teardown. The blocking ktorServer.stop() above is pre-existing by design
+            // (bounded by Netty's own shutdown timeouts); this timeout additionally bounds the
+            // repository mutex wait. A rare timeout is covered by the ON_RESUME refresh on the
+            // next foreground.
+            runCatching { withTimeoutOrNull(2_000) { serverRepository.refresh() } }
         }
         super.onDestroy()
     }
@@ -157,10 +175,18 @@ class FileServerService : Service() {
     }
 
     private suspend fun processStart(command: ServerCommand.Start) {
+        if (stopRequested) return // a queued Stop will finalize the state through the repository
         if (ktorServer.isRunning) return
 
         try {
             ktorServer.start(command.port, command.host, command.useHttps)
+            if (stopRequested) {
+                // Stop was accepted while the engine was still binding. Finalize it here instead
+                // of calling refresh(), so a Running state is never published after a stop — the
+                // queued Stop command then finds everything already stopped.
+                serverRepository.stopFromService()
+                return
+            }
             // Reconcile after the real bind completes. Repository.start() dispatches this
             // command asynchronously, so a foreground refresh can otherwise revoke its PIN
             // before Netty has finished starting.
@@ -177,11 +203,19 @@ class FileServerService : Service() {
         }
     }
 
+    // Runs under repository.mutex, so a repository.stop() holding the lock is never interleaved.
+    // The repository's final _state.value = Stopped happens-before this stopSelfResult; the
+    // processStop -> UI Stopped ordering is a property of that shared lock, not a guarantee
+    // that the collection coroutine wins any race.
     private suspend fun processStop(command: ServerCommand.Stop) {
         try {
-            ktorServer.stop()
+            serverRepository.stopFromService()
+        } catch (cause: Exception) {
+            Log.e(LOG_TAG, "Failed to stop server via repository", cause)
         } finally {
-            refreshAndStop(command.startId)
+            withContext(NonCancellable + Dispatchers.Main.immediate) {
+                stopSelfResult(command.startId)
+            }
         }
     }
 
