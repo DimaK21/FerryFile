@@ -6,6 +6,9 @@ sealed interface ServerState {
 
     data object Starting : ServerState
 
+    /** Идёт graceful shutdown Netty; адрес и PIN уже не показываются. */
+    data object Stopping : ServerState
+
     /** [address] равен `null`, когда сервер запущен, но устройство не в Wi-Fi-сети. */
     data class Running(
         val address: ServerAddress?,

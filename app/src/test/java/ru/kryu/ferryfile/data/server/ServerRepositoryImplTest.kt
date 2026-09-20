@@ -240,4 +240,100 @@ class ServerRepositoryImplTest {
         assertEquals(ServerState.Stopped, repo.state.value)
         assertEquals(FileServerService.ACTION_STOP, repo.launches.last().action)
     }
+
+    @Test
+    fun `stop publishes Stopping before the engine shutdown returns`() = runTest {
+        whenever(server.isRunning).thenReturn(true)
+        val repo = repo(
+            network = SequenceNetworkRepository(mutableListOf()),
+            accessCodes = InMemoryAccessCodeRepository()
+        )
+        var stateDuringShutdown: ServerState? = null
+        whenever(server.stop()).thenAnswer {
+            stateDuringShutdown = repo.state.value
+            Unit
+        }
+
+        repo.stop()
+
+        assertEquals(ServerState.Stopping, stateDuringShutdown)
+        assertEquals(ServerState.Stopped, repo.state.value)
+    }
+
+    @Test
+    fun `service-origin stop never dispatches ACTION_STOP`() = runTest {
+        whenever(settings.port).thenReturn(MutableStateFlow(Port.DEFAULT))
+        whenever(settings.useHttps).thenReturn(MutableStateFlow(false))
+        whenever(server.isRunning).thenReturn(false, true)
+        val repo = repo(
+            network = SequenceNetworkRepository(mutableListOf("10.0.0.5", "10.0.0.5")),
+            accessCodes = InMemoryAccessCodeRepository()
+        )
+        repo.start()
+        repo.refresh()
+        var stateDuringShutdown: ServerState? = null
+        whenever(server.stop()).thenAnswer {
+            stateDuringShutdown = repo.state.value
+            Unit
+        }
+
+        repo.stopFromService()
+
+        assertEquals(ServerState.Stopping, stateDuringShutdown)
+        assertEquals(ServerState.Stopped, repo.state.value)
+        assertTrue(repo.launches.none { it.action == FileServerService.ACTION_STOP })
+    }
+
+    @Test
+    fun `service-origin stop of an already dead server goes straight to stopped`() = runTest {
+        whenever(server.isRunning).thenReturn(false)
+        val repo = repo(
+            network = SequenceNetworkRepository(mutableListOf()),
+            accessCodes = InMemoryAccessCodeRepository()
+        )
+        var stateDuringShutdown: ServerState? = null
+        whenever(server.stop()).thenAnswer {
+            stateDuringShutdown = repo.state.value
+            Unit
+        }
+
+        repo.stopFromService()
+
+        assertEquals(ServerState.Stopped, repo.state.value)
+        assertNotSame(ServerState.Stopping, stateDuringShutdown)
+    }
+
+    @Test
+    fun `second start while starting is ignored`() = runTest {
+        whenever(settings.port).thenReturn(MutableStateFlow(Port.DEFAULT))
+        whenever(settings.useHttps).thenReturn(MutableStateFlow(false))
+        whenever(server.isRunning).thenReturn(false)
+        val repo = repo(
+            network = SequenceNetworkRepository(mutableListOf("10.0.0.5")),
+            accessCodes = InMemoryAccessCodeRepository()
+        )
+
+        repo.start()
+        repo.start()
+
+        assertEquals(1, repo.launches.size)
+        assertEquals(ServerState.Starting, repo.state.value)
+    }
+
+    @Test
+    fun `stop publishes stopped even when the engine shutdown throws`() = runTest {
+        whenever(server.isRunning).thenReturn(true)
+        whenever(server.stop()).thenThrow(IllegalStateException("shutdown"))
+        val accessCodes = InMemoryAccessCodeRepository()
+        val repo = repo(
+            network = SequenceNetworkRepository(mutableListOf()),
+            accessCodes = accessCodes
+        )
+
+        val failure = runCatching { repo.stop() }
+
+        assertTrue(failure.isFailure)
+        assertEquals(ServerState.Stopped, repo.state.value)
+        assertNull(accessCodes.current)
+    }
 }
