@@ -63,3 +63,35 @@ The upload path creates the destination file before streaming bytes into it. If 
 the client disconnects after creation, the current SAF repository closes the stream but does not
 remove the partially written `DocumentFile`. The readiness checklist tracks cleanup, free-space
 handling, cancellation, and a user-visible policy for partial results.
+
+## The server stops by itself after ~6 hours in the background on Android 15+
+
+On Android 15+ (API 35) the system limits a `dataSync` foreground service (the type of
+`FileServerService`) to about 6 hours per 24 hours while the app is in the background; the timer
+resets when the user brings the app to the foreground. When the limit is hit the system calls
+`Service.onTimeout(startId, fgsType)` and crashes the app unless the service calls `stopSelf()`
+within a few seconds.
+
+**Behaviour:** `FileServerService.onTimeout` stops the engine through
+`ServerRepository.stopFromService()` (the wait is capped at `TIME_LIMIT_STOP_BUDGET_MS`, see
+`TimeLimitStop.kt`), posts a "stopped because of the system time limit" notification and calls
+`stopSelf()`. Home shows Stopped; browsers connected at that moment lose the connection.
+
+**Impact:** a server left running in the background for more than ~6 hours has to be started
+again by the user. This is a platform limit, not something the app can lift; an alternative API
+(e.g. WorkManager) does not fit an always-listening server.
+
+**Verification status:** the bounded-stop helper is unit-tested (`TimeLimitStopTest`); the
+`onTimeout` wiring has **not** been run on an Android 15+ device yet (the reference device is
+Android 11, which has no such limit). Recipe from the
+[Android docs](https://developer.android.com/develop/background-work/services/fgs/timeout), for the
+debug build (`ru.kryu.ferryfile.debug`):
+
+```
+adb shell am compat enable FGS_INTRODUCE_TIME_LIMITS ru.kryu.ferryfile.debug
+adb shell device_config put activity_manager data_sync_fgs_timeout_duration 60000
+```
+
+Start the server, send the app to the background, wait over a minute. Expected: the server stops,
+the notification appears, logcat shows no `RemoteServiceException`, Home shows Stopped on return.
+Undo with `adb shell device_config delete activity_manager data_sync_fgs_timeout_duration`.

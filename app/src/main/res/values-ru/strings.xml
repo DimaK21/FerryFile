@@ -33,6 +33,7 @@
     <string name="notification_channel_name">Сервер FerryFile</string>
     <string name="notification_no_wifi_connection">Нет подключения к Wi-Fi</string>
     <string name="notification_stop">Остановить</string>
+    <string name="notification_time_limit_stopped">Сервер остановлен: Android ограничивает время работы фоновой службы передачи данных. Откройте FerryFile, чтобы запустить его снова.</string>
     <string name="home_dateline_network">Локальный Wi-Fi · порт %1$s</string>
     <string name="home_dateline_no_network">Нет сети</string>
     <string name="home_headline_running">Сервер работает</string>

@@ -34,6 +34,7 @@
     <string name="notification_channel_name">FerryFile Server</string>
     <string name="notification_no_wifi_connection">No Wi-Fi connection</string>
     <string name="notification_stop">Stop</string>
+    <string name="notification_time_limit_stopped">Server stopped: Android limits how long a background data-transfer service can run. Open FerryFile to start it again.</string>
     <string name="home_dateline_network">Local Wi-Fi · Port %1$s</string>
     <string name="home_dateline_no_network">No network</string>
     <string name="home_headline_running">Server running</string>

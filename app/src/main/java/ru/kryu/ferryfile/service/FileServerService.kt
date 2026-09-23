@@ -7,10 +7,13 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -44,7 +47,8 @@ class FileServerService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val commands = Channel<ServerCommand>(Channel.UNLIMITED)
 
-    // Set from the moment ACTION_STOP is accepted until a fresh ACTION_START is accepted:
+    // Set from the moment ACTION_STOP (or the system time-limit callback) is accepted until a
+    // fresh ACTION_START is accepted:
     // not just a duplicate-click guard — after a stop, KtorServer.isRunning flips to false
     // *before* the blocking shutdown returns, so a Start still queued in `commands` could
     // otherwise pass the isRunning check and resurrect the server mid-stop.
@@ -70,6 +74,7 @@ class FileServerService : Service() {
         const val EXTRA_HOST = "ru.kryu.ferryfile.EXTRA_HOST"
         const val EXTRA_USE_HTTPS = "ru.kryu.ferryfile.EXTRA_USE_HTTPS"
         const val NOTIFICATION_ID = 1
+        const val NOTIFICATION_ID_TIME_LIMIT = 2
         const val CHANNEL_ID = "ferryfile_server"
         const val LOG_TAG = "FerryFileServer"
     }
@@ -109,6 +114,8 @@ class FileServerService : Service() {
                     return START_NOT_STICKY
                 }
                 stopRequested = false
+                // A fresh start supersedes the "stopped by the time limit" message.
+                getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID_TIME_LIMIT)
                 commands.trySend(
                     ServerCommand.Start(
                         port = port,
@@ -147,7 +154,67 @@ class FileServerService : Service() {
         super.onDestroy()
     }
 
+    // Android 15+ (API 35): a dataSync foreground service may run for about 6 h per 24 h while the
+    // app is in the background (the timer resets when the user brings the app to the foreground).
+    // When the budget is spent the system calls this on the main thread and crashes the app
+    // unless the service calls stopSelf() within a few seconds. Never called on older releases.
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        if (fgsType != ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) {
+            super.onTimeout(startId, fgsType)
+            return
+        }
+        Log.w(LOG_TAG, "dataSync foreground service time limit reached; stopping the server")
+        stopRequested = true
+        // Deliberately not through `commands`: a Start or a slow Stop ahead in the queue must not
+        // delay stopSelf() past the platform deadline. stopRequested keeps a queued Start from
+        // resurrecting the engine.
+        serviceScope.launch {
+            try {
+                if (!stopServerForTimeLimit(serviceScope, serverRepository)) {
+                    Log.w(
+                        LOG_TAG,
+                        "Server shutdown still running after $TIME_LIMIT_STOP_BUDGET_MS ms; " +
+                            "releasing the foreground service (onDestroy waits for the engine)"
+                    )
+                }
+                notifyTimeLimitReached()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (cause: Exception) {
+                Log.e(LOG_TAG, "Failed to finish the time-limit stop", cause)
+            } finally {
+                // Whatever went wrong above, the service must still be stopped or the system
+                // crashes the app. Unconditional stopSelf(), not stopSelfResult(startId): a newer
+                // start request must not keep a foreground service alive that the system has
+                // already timed out.
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    stopSelf()
+                }
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun notifyTimeLimitReached() {
+        val text = getString(R.string.notification_time_limit_stopped)
+        val openApp = packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
+            PendingIntent.getActivity(this, 1, launch, PendingIntent.FLAG_IMMUTABLE)
+        }
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(getString(R.string.brand_name))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(openApp)
+            .setAutoCancel(true)
+            .build()
+        // Separate id: the foreground notification (NOTIFICATION_ID) disappears with the service.
+        // Silently dropped by the system if POST_NOTIFICATIONS was not granted.
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID_TIME_LIMIT, notification)
+    }
 
     private fun buildNotification(address: String?): Notification {
         val stopIntent = PendingIntent.getService(
