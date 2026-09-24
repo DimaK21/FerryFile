@@ -3,9 +3,8 @@ package ru.kryu.ferryfile.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Broadsheet design tokens — see docs/superpowers/specs/2026-09-16-broadsheet-restyle/README.md
- * for the light values (copied from the design system's styles.css) and the dark ink cut,
- * which the spec calls a proposal, not a shipped token set.
+ * Broadsheet design tokens. The light values come from the design system's stylesheet;
+ * the dark "ink" cut is our own proposal, not part of that system.
  */
 data class BroadsheetColors(
     val bg: Color,
@@ -38,7 +37,7 @@ val LightBroadsheetColors = BroadsheetColors(
 )
 
 // Dark ink cut: Broadsheet ships no dark surfaces. neutral300 and neutral600 are derived
-// (collapsed onto the nearest tone the spec does give) rather than taken from the system.
+// (collapsed onto the nearest tone the system does give) rather than taken from it.
 val DarkBroadsheetColors = BroadsheetColors(
     bg = Color(0xFF201E1D),
     surface = Color(0xFF2D2B2B),
