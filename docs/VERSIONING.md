@@ -25,6 +25,8 @@ This configuration produces `versionName = 0.1.0` and `versionCode = 1`.
 - Set `APP_VERSION_SUFFIX` to a prerelease identifier such as `beta`, `rc.1`, or `dev`. Leave it empty for a stable release.
 - Increase `APP_VERSION_CODE` for every upload to Google Play. Never reuse a code, even when only the suffix changes.
 
+The branch, merge and tag flow for a release is described in [RELEASING.md](RELEASING.md).
+
 Examples:
 
 | Properties | Result |

@@ -1,24 +1,21 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
+# Gradle / build output
+.gradle/
+/build/
+/captures/
+/.kotlin/
 .externalNativeBuild
 .cxx
-local.properties
+
+# IDE
+*.iml
 /.idea/
-/.kotlin/
-/.claude/
-/.superpowers/
-/.worktrees/
-/app/release/
+
+# Local configuration and signing material
+local.properties
 /keystore.properties
+/app/release/
 *.jks
 *.keystore
+
+# OS
+.DS_Store
