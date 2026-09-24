@@ -8,6 +8,7 @@
     <string name="home_start_server">Запустить сервер</string>
     <string name="home_stop_server">Остановить сервер</string>
     <string name="home_status_starting">Запуск…</string>
+    <string name="home_status_stopping">Остановка…</string>
     <string name="home_status_running">Работает</string>
     <string name="home_status_stopped">Остановлен</string>
     <string name="home_no_wifi_connection">Нет подключения к Wi-Fi — подключите телефон к той же сети, что и компьютер.</string>
@@ -32,6 +33,7 @@
     <string name="notification_channel_name">Сервер FerryFile</string>
     <string name="notification_no_wifi_connection">Нет подключения к Wi-Fi</string>
     <string name="notification_stop">Остановить</string>
+    <string name="notification_time_limit_stopped">Сервер остановлен: Android ограничивает время работы фоновой службы передачи данных. Откройте FerryFile, чтобы запустить его снова.</string>
     <string name="home_dateline_network">Локальный Wi-Fi · порт %1$s</string>
     <string name="home_dateline_no_network">Нет сети</string>
     <string name="home_headline_running">Сервер работает</string>
@@ -39,6 +41,7 @@
     <string name="home_running_standfirst">Введите адрес в браузере на том же Wi-Fi, затем шестизначный PIN.</string>
     <string name="home_stopped_standfirst">Запустите сервер, чтобы получить адрес и PIN для компьютера.</string>
     <string name="home_starting_standfirst">Поднимаем сервер и выдаём PIN.</string>
+    <string name="home_stopping_standfirst">Завершаем работу сервера.</string>
     <string name="home_notice_kicker">Важно</string>
     <string name="home_address_label">Адрес</string>
     <string name="home_address_unavailable">недоступен</string>

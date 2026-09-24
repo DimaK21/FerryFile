@@ -47,6 +47,9 @@ open class ServerRepositoryImpl @Inject constructor(
             refreshLocked()
             return@withLock
         }
+        if (_state.value is ServerState.Starting) {
+            return@withLock // дубль Start, пока сервис ещё не подтвердил bind
+        }
         _state.value = ServerState.Starting
         var published = false
         try {
@@ -87,8 +90,25 @@ open class ServerRepositoryImpl @Inject constructor(
     }
 
     override suspend fun stop(): Unit = mutex.withLock {
+        stopInternal(dispatchService = true)
+    }
+
+    override suspend fun stopFromService(): Unit = mutex.withLock {
+        stopInternal(dispatchService = false)
+    }
+
+    // Publishing Stopped before dispatching ACTION_STOP (rather than tearing the service down
+    // first) is deliberate: the UI learns the truth as soon as the engine is actually gone, and
+    // the service call is a pure notification-channel teardown that must not loop back here.
+    private suspend fun stopInternal(dispatchService: Boolean) {
+        // Stopping only while the engine really lives: stopFromService() can arrive after the
+        // UI-initiated stop already tore everything down, or while a stale Start sits in the
+        // service command queue.
+        if (server.isRunning) {
+            _state.value = ServerState.Stopping
+        }
         try {
-            // Wait for the actual engine shutdown before allowing a subsequent start. This also
+            // Wait for the actual engine shutdown before publishing stopped. This also
             // keeps the blocking Netty shutdown away from the caller's main thread.
             server.stop()
         } finally {
@@ -96,7 +116,9 @@ open class ServerRepositoryImpl @Inject constructor(
             activeUseHttps = false
             activePort = null
             _state.value = ServerState.Stopped
-            launchService(FileServerService.ACTION_STOP)
+            if (dispatchService) {
+                launchService(FileServerService.ACTION_STOP)
+            }
         }
     }
 

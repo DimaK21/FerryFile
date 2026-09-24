@@ -63,3 +63,46 @@ The upload path creates the destination file before streaming bytes into it. If 
 the client disconnects after creation, the current SAF repository closes the stream but does not
 remove the partially written `DocumentFile`. The readiness checklist tracks cleanup, free-space
 handling, cancellation, and a user-visible policy for partial results.
+
+## The server stops by itself after ~6 hours in the background on Android 15+
+
+On Android 15+ (API 35) the system limits a `dataSync` foreground service (the type of
+`FileServerService`) to about 6 hours per 24 hours while the app is in the background; the timer
+resets when the user brings the app to the foreground. When the limit is hit the system calls
+`Service.onTimeout(startId, fgsType)` and crashes the app unless the service calls `stopSelf()`
+within a few seconds.
+
+**Behaviour:** `FileServerService.onTimeout` stops the engine through
+`ServerRepository.stopFromService()` (the wait is capped at `TIME_LIMIT_STOP_BUDGET_MS`, see
+`TimeLimitStop.kt`), posts a "stopped because of the system time limit" notification and calls
+`stopSelf()`. Home shows Stopped; browsers connected at that moment lose the connection.
+
+**Impact:** a server left running in the background for more than ~6 hours has to be started
+again by the user. This is a platform limit, not something the app can lift; an alternative API
+(e.g. WorkManager) does not fit an always-listening server.
+
+**Verification status:** the bounded-stop helper is unit-tested (`TimeLimitStopTest`). The full
+path was run on an Android 16 emulator (API 36.1, `Medium_Phone` AVD) with the timeout shortened
+to 60 s (recipe below): `onTimeout` fired 60 s after the app went to the background, the server
+stopped, the service ended with no `RemoteServiceException` and the process stayed alive, the
+notification appeared (tapping it opens Home in Stopped), and after reopening the app a fresh
+Start worked and removed the stale notification. The timeout cycle ran three times in a row
+without a crash. **Not covered:** a
+shutdown slower than the 3 s budget (an active transfer at the moment of the timeout) exists only
+as a unit test, and nothing was run on the physical reference phone (Android 11 has no such
+limit, so there is nothing to reproduce there).
+
+Recipe, from the
+[Android docs](https://developer.android.com/develop/background-work/services/fgs/timeout), for the
+debug build (`ru.kryu.ferryfile.debug`, `targetSdk` 36 so no compat flag is needed):
+
+```
+adb shell device_config set_sync_disabled_for_tests persistent
+adb shell device_config put activity_manager data_sync_fgs_timeout_duration 60000
+```
+
+Start the server, send the app to the background, wait over a minute. Expected: logcat has
+`FerryFileServer: dataSync foreground service time limit reached`, the server stops, the
+notification appears, no `RemoteServiceException`, Home shows Stopped on return. Undo with
+`adb shell device_config delete activity_manager data_sync_fgs_timeout_duration` and
+`adb shell device_config set_sync_disabled_for_tests none`.

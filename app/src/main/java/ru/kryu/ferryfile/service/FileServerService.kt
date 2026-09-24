@@ -7,10 +7,13 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -20,6 +23,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import ru.kryu.ferryfile.R
 import ru.kryu.ferryfile.domain.repository.ServerRepository
 import ru.kryu.ferryfile.domain.repository.SettingsRepository
@@ -43,6 +47,14 @@ class FileServerService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val commands = Channel<ServerCommand>(Channel.UNLIMITED)
 
+    // Set from the moment ACTION_STOP (or the system time-limit callback) is accepted until a
+    // fresh ACTION_START is accepted:
+    // not just a duplicate-click guard — after a stop, KtorServer.isRunning flips to false
+    // *before* the blocking shutdown returns, so a Start still queued in `commands` could
+    // otherwise pass the isRunning check and resurrect the server mid-stop.
+    @Volatile
+    private var stopRequested = false
+
     private sealed interface ServerCommand {
         data class Start(
             val port: Int,
@@ -62,6 +74,7 @@ class FileServerService : Service() {
         const val EXTRA_HOST = "ru.kryu.ferryfile.EXTRA_HOST"
         const val EXTRA_USE_HTTPS = "ru.kryu.ferryfile.EXTRA_USE_HTTPS"
         const val NOTIFICATION_ID = 1
+        const val NOTIFICATION_ID_TIME_LIMIT = 2
         const val CHANNEL_ID = "ferryfile_server"
         const val LOG_TAG = "FerryFileServer"
     }
@@ -100,6 +113,9 @@ class FileServerService : Service() {
                     serviceScope.launch { refreshAndStop(startId) }
                     return START_NOT_STICKY
                 }
+                stopRequested = false
+                // A fresh start supersedes the "stopped by the time limit" message.
+                getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID_TIME_LIMIT)
                 commands.trySend(
                     ServerCommand.Start(
                         port = port,
@@ -109,7 +125,10 @@ class FileServerService : Service() {
                     )
                 )
             }
-            ACTION_STOP -> commands.trySend(ServerCommand.Stop(startId))
+            ACTION_STOP -> {
+                stopRequested = true
+                commands.trySend(ServerCommand.Stop(startId))
+            }
         }
         return START_NOT_STICKY
     }
@@ -125,11 +144,77 @@ class FileServerService : Service() {
             } catch (cause: Exception) {
                 Log.e(LOG_TAG, "Failed to stop server during service teardown", cause)
             }
+            // Best-effort reconciliation so the UI is not left showing Running/Stopping after an
+            // abnormal teardown. The blocking ktorServer.stop() above is pre-existing by design
+            // (bounded by Netty's own shutdown timeouts); this timeout additionally bounds the
+            // repository mutex wait. A rare timeout is covered by the ON_RESUME refresh on the
+            // next foreground.
+            runCatching { withTimeoutOrNull(2_000) { serverRepository.refresh() } }
         }
         super.onDestroy()
     }
 
+    // Android 15+ (API 35): a dataSync foreground service may run for about 6 h per 24 h while the
+    // app is in the background (the timer resets when the user brings the app to the foreground).
+    // When the budget is spent the system calls this on the main thread and crashes the app
+    // unless the service calls stopSelf() within a few seconds. Never called on older releases.
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        if (fgsType != ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) {
+            super.onTimeout(startId, fgsType)
+            return
+        }
+        Log.w(LOG_TAG, "dataSync foreground service time limit reached; stopping the server")
+        stopRequested = true
+        // Deliberately not through `commands`: a Start or a slow Stop ahead in the queue must not
+        // delay stopSelf() past the platform deadline. stopRequested keeps a queued Start from
+        // resurrecting the engine.
+        serviceScope.launch {
+            try {
+                if (!stopServerForTimeLimit(serviceScope, serverRepository)) {
+                    Log.w(
+                        LOG_TAG,
+                        "Server shutdown still running after $TIME_LIMIT_STOP_BUDGET_MS ms; " +
+                            "releasing the foreground service (onDestroy waits for the engine)"
+                    )
+                }
+                notifyTimeLimitReached()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (cause: Exception) {
+                Log.e(LOG_TAG, "Failed to finish the time-limit stop", cause)
+            } finally {
+                // Whatever went wrong above, the service must still be stopped or the system
+                // crashes the app. Unconditional stopSelf(), not stopSelfResult(startId): a newer
+                // start request must not keep a foreground service alive that the system has
+                // already timed out.
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    stopSelf()
+                }
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun notifyTimeLimitReached() {
+        val text = getString(R.string.notification_time_limit_stopped)
+        val openApp = packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
+            PendingIntent.getActivity(this, 1, launch, PendingIntent.FLAG_IMMUTABLE)
+        }
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(getString(R.string.brand_name))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(openApp)
+            .setAutoCancel(true)
+            .build()
+        // Separate id: the foreground notification (NOTIFICATION_ID) disappears with the service.
+        // Silently dropped by the system if POST_NOTIFICATIONS was not granted.
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID_TIME_LIMIT, notification)
+    }
 
     private fun buildNotification(address: String?): Notification {
         val stopIntent = PendingIntent.getService(
@@ -157,10 +242,18 @@ class FileServerService : Service() {
     }
 
     private suspend fun processStart(command: ServerCommand.Start) {
+        if (stopRequested) return // a queued Stop will finalize the state through the repository
         if (ktorServer.isRunning) return
 
         try {
             ktorServer.start(command.port, command.host, command.useHttps)
+            if (stopRequested) {
+                // Stop was accepted while the engine was still binding. Finalize it here instead
+                // of calling refresh(), so a Running state is never published after a stop — the
+                // queued Stop command then finds everything already stopped.
+                serverRepository.stopFromService()
+                return
+            }
             // Reconcile after the real bind completes. Repository.start() dispatches this
             // command asynchronously, so a foreground refresh can otherwise revoke its PIN
             // before Netty has finished starting.
@@ -177,11 +270,19 @@ class FileServerService : Service() {
         }
     }
 
+    // Runs under repository.mutex, so a repository.stop() holding the lock is never interleaved.
+    // The repository's final _state.value = Stopped happens-before this stopSelfResult; the
+    // processStop -> UI Stopped ordering is a property of that shared lock, not a guarantee
+    // that the collection coroutine wins any race.
     private suspend fun processStop(command: ServerCommand.Stop) {
         try {
-            ktorServer.stop()
+            serverRepository.stopFromService()
+        } catch (cause: Exception) {
+            Log.e(LOG_TAG, "Failed to stop server via repository", cause)
         } finally {
-            refreshAndStop(command.startId)
+            withContext(NonCancellable + Dispatchers.Main.immediate) {
+                stopSelfResult(command.startId)
+            }
         }
     }
 

@@ -32,7 +32,7 @@ Every user-visible string needs all three places updated together:
 ## Gotchas
 
 - Debug build has `applicationIdSuffix = ".debug"` → package is `ru.kryu.ferryfile.debug`; adb/logcat/install commands written for `ru.kryu.ferryfile` will target the release install instead.
-- Unit tests rely on `testOptions.unitTests.isReturnDefaultValues = true` (`android.util.Log` calls no-op on JVM).
+- `android.util.Log` is not stubbed in JVM tests: calling it from code under test throws "Method ... not mocked". `isReturnDefaultValues` was removed on purpose, so give such code a `logError: (String, Throwable) -> Unit` seam defaulting to `Log.e` (see `configureFileRoutes`, `stopServerForTimeLimit`) and assert on it in tests.
 - Version numbers live only in root `gradle.properties` (`APP_VERSION_*`, `APP_VERSION_CODE`); release procedure in `docs/VERSIONING.md`.
 - Upload route must keep `catch (CancellationException) { throw }` semantics and drain the raw request channel on failure (see `docs/DEVICE_VERIFICATION.md` fix rounds — regressions here caused silent 75 MiB upload stalls).
 - Home screen state refreshes via `LifecycleEventEffect(ON_RESUME)` **and** service-driven `ServerRepository.refresh()` after notification Stop; both are required.

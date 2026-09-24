@@ -8,6 +8,7 @@
     <string name="home_start_server">Start Server</string>
     <string name="home_stop_server">Stop Server</string>
     <string name="home_status_starting">Starting…</string>
+    <string name="home_status_stopping">Stopping…</string>
     <string name="home_status_running">Running</string>
     <string name="home_status_stopped">Stopped</string>
     <string name="home_no_wifi_connection">No Wi-Fi connection — connect this phone to the same network as your computer.</string>
@@ -33,6 +34,7 @@
     <string name="notification_channel_name">FerryFile Server</string>
     <string name="notification_no_wifi_connection">No Wi-Fi connection</string>
     <string name="notification_stop">Stop</string>
+    <string name="notification_time_limit_stopped">Server stopped: Android limits how long a background data-transfer service can run. Open FerryFile to start it again.</string>
     <string name="home_dateline_network">Local Wi-Fi · Port %1$s</string>
     <string name="home_dateline_no_network">No network</string>
     <string name="home_headline_running">Server running</string>
@@ -40,6 +42,7 @@
     <string name="home_running_standfirst">Type the address into any browser on the same network, then enter the six-digit PIN.</string>
     <string name="home_stopped_standfirst">Start the server to hand the address and PIN to your computer.</string>
     <string name="home_starting_standfirst">Bringing the server up and issuing a PIN.</string>
+    <string name="home_stopping_standfirst">Shutting down the server.</string>
     <string name="home_notice_kicker">Notice</string>
     <string name="home_address_label">Address</string>
     <string name="home_address_unavailable">unavailable</string>

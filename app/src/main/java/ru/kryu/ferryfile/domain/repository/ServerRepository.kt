@@ -11,6 +11,9 @@ interface ServerRepository {
 
     suspend fun stop()
 
+    /** Останавливает сервер без повторного диспатча `ACTION_STOP` — вызывается самим сервисом. */
+    suspend fun stopFromService()
+
     /** Пересобирает состояние по факту: сервер могли остановить из уведомления. */
     suspend fun refresh()
 }
