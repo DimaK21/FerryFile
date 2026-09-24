@@ -81,17 +81,28 @@ within a few seconds.
 again by the user. This is a platform limit, not something the app can lift; an alternative API
 (e.g. WorkManager) does not fit an always-listening server.
 
-**Verification status:** the bounded-stop helper is unit-tested (`TimeLimitStopTest`); the
-`onTimeout` wiring has **not** been run on an Android 15+ device yet (the reference device is
-Android 11, which has no such limit). Recipe from the
+**Verification status:** the bounded-stop helper is unit-tested (`TimeLimitStopTest`). The full
+path was run on an Android 16 emulator (API 36.1, `Medium_Phone` AVD) with the timeout shortened
+to 60 s (recipe below): `onTimeout` fired 60 s after the app went to the background, the server
+stopped, the service ended with no `RemoteServiceException` and the process stayed alive, the
+notification appeared (tapping it opens Home in Stopped), and after reopening the app a fresh
+Start worked and removed the stale notification. The timeout cycle ran three times in a row
+without a crash. **Not covered:** a
+shutdown slower than the 3 s budget (an active transfer at the moment of the timeout) exists only
+as a unit test, and nothing was run on the physical reference phone (Android 11 has no such
+limit, so there is nothing to reproduce there).
+
+Recipe, from the
 [Android docs](https://developer.android.com/develop/background-work/services/fgs/timeout), for the
-debug build (`ru.kryu.ferryfile.debug`):
+debug build (`ru.kryu.ferryfile.debug`, `targetSdk` 36 so no compat flag is needed):
 
 ```
-adb shell am compat enable FGS_INTRODUCE_TIME_LIMITS ru.kryu.ferryfile.debug
+adb shell device_config set_sync_disabled_for_tests persistent
 adb shell device_config put activity_manager data_sync_fgs_timeout_duration 60000
 ```
 
-Start the server, send the app to the background, wait over a minute. Expected: the server stops,
-the notification appears, logcat shows no `RemoteServiceException`, Home shows Stopped on return.
-Undo with `adb shell device_config delete activity_manager data_sync_fgs_timeout_duration`.
+Start the server, send the app to the background, wait over a minute. Expected: logcat has
+`FerryFileServer: dataSync foreground service time limit reached`, the server stops, the
+notification appears, no `RemoteServiceException`, Home shows Stopped on return. Undo with
+`adb shell device_config delete activity_manager data_sync_fgs_timeout_duration` and
+`adb shell device_config set_sync_disabled_for_tests none`.
