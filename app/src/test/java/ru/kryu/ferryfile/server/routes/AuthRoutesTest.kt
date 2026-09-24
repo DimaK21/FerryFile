@@ -28,34 +28,6 @@ class AuthRoutesTest {
         pin = accessCodes.issue().digits
     }
 
-    private fun withApp(
-        secureCookies: Boolean = false,
-        block: suspend ApplicationTestBuilder.() -> Unit
-    ) = testApplication {
-        install(ContentNegotiation) { json() }
-        application {
-            configureAuthRoutes(
-                sessionManager,
-                VerifyAccessCodeUseCase(accessCodes),
-                secureCookies = secureCookies
-            )
-            // Test-only protected endpoint so tests can prove a session cookie does (or no
-            // longer does) authenticate, without depending on any real protected route.
-            routing {
-                authenticate("session") {
-                    get("/protected") { call.respond(HttpStatusCode.OK) }
-                }
-            }
-        }
-        block()
-    }
-
-    private suspend fun ApplicationTestBuilder.login(candidate: String) =
-        client.post("/login") {
-            contentType(ContentType.Application.Json)
-            setBody("""{"pin":"$candidate"}""")
-        }
-
     @Test fun `correct pin returns 200 and sets a session cookie`() = withApp {
         val res = login(pin)
         assertEquals(HttpStatusCode.OK, res.status)
@@ -126,4 +98,32 @@ class AuthRoutesTest {
             client.post("/logout") { cookie("FERRYFILE_SESSION", sessionCookie) }.status
         )
     }
+
+    private fun withApp(
+        secureCookies: Boolean = false,
+        block: suspend ApplicationTestBuilder.() -> Unit
+    ) = testApplication {
+        install(ContentNegotiation) { json() }
+        application {
+            configureAuthRoutes(
+                sessionManager,
+                VerifyAccessCodeUseCase(accessCodes),
+                secureCookies = secureCookies
+            )
+            // Test-only protected endpoint so tests can prove a session cookie does (or no
+            // longer does) authenticate, without depending on any real protected route.
+            routing {
+                authenticate("session") {
+                    get("/protected") { call.respond(HttpStatusCode.OK) }
+                }
+            }
+        }
+        block()
+    }
+
+    private suspend fun ApplicationTestBuilder.login(candidate: String) =
+        client.post("/login") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"pin":"$candidate"}""")
+        }
 }

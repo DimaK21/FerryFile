@@ -364,9 +364,6 @@ fun Application.configureFileRoutes(
     }
 }
 
-private fun loadAsset(assets: AssetManager, path: String): String? =
-    runCatching { assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()
-
 /**
  * `Content-Disposition` с ASCII-запасным именем и RFC 5987-формой для кириллицы и прочего
  * не-ASCII. Без `filename*` браузер сохранит файл под искажённым именем.
@@ -378,3 +375,6 @@ internal fun attachmentHeader(fileName: String): String {
     val encoded = URLEncoder.encode(fileName, Charsets.UTF_8.name()).replace("+", "%20")
     return "attachment; filename=\"$asciiFallback\"; filename*=UTF-8''$encoded"
 }
+
+private fun loadAsset(assets: AssetManager, path: String): String? =
+    runCatching { assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()

@@ -23,10 +23,10 @@ value class FilePath private constructor(val raw: String) {
     }
 
     companion object {
+        val ROOT = FilePath(ROOT_RAW)
+
         private const val ROOT_RAW = "/"
         private const val SEPARATOR = '/'
-
-        val ROOT = FilePath(ROOT_RAW)
 
         fun root(index: Int): FilePath = FilePath(index.toString())
 

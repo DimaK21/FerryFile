@@ -11,8 +11,6 @@ class SafPathResolverTest {
     private val rootsProvider: SafRootsProvider = mock()
     private val resolver = SafPathResolver(rootsProvider)
 
-    private fun dir(): DocumentFile = mock<DocumentFile>().also { whenever(it.isDirectory).thenReturn(true) }
-
     @Test fun `virtual root resolves to nothing`() {
         assertNull(resolver.resolve(FilePath.ROOT))
     }
@@ -55,4 +53,6 @@ class SafPathResolverTest {
         assertSame(second, resolver.resolve(FilePath.parse("1")!!))
         assertNull(resolver.resolve(FilePath.parse("0")!!))
     }
+
+    private fun dir(): DocumentFile = mock<DocumentFile>().also { whenever(it.isDirectory).thenReturn(true) }
 }

@@ -18,8 +18,6 @@ val SourceSerif4 = FontFamily(
     Font(R.font.source_serif_4_italic, FontWeight.Normal, FontStyle.Italic)
 )
 
-private const val TabularNumbers = "tnum"
-
 /** Broadsheet type roles — named per role, not stretched onto
  * Material3's headlineSmall/displaySmall/labelMedium semantics. Color is applied by callers. */
 object BroadsheetType {
@@ -35,20 +33,6 @@ object BroadsheetType {
         fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp
     )
-
-    // 44sp EN / 40sp RU — Russian labels run longer, so the headline steps down.
-    @Composable
-    fun headline(): TextStyle {
-        val isRussian = LocalConfiguration.current.locales[0].language == "ru"
-        val size = if (isRussian) 40.sp else 44.sp
-        return TextStyle(
-            fontFamily = SourceSerif4,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = size,
-            letterSpacing = (-0.03).em,
-            lineHeight = size * 1.12f
-        )
-    }
 
     val standfirst = TextStyle(
         fontFamily = SourceSerif4,
@@ -126,6 +110,20 @@ object BroadsheetType {
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp
     )
+
+    // 44sp EN / 40sp RU — Russian labels run longer, so the headline steps down.
+    @Composable
+    fun headline(): TextStyle {
+        val isRussian = LocalConfiguration.current.locales[0].language == "ru"
+        val size = if (isRussian) 40.sp else 44.sp
+        return TextStyle(
+            fontFamily = SourceSerif4,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = size,
+            letterSpacing = (-0.03).em,
+            lineHeight = size * 1.12f
+        )
+    }
 }
 
 val Typography = Typography(
@@ -136,3 +134,5 @@ val Typography = Typography(
         lineHeight = 24.sp
     )
 )
+
+private const val TabularNumbers = "tnum"

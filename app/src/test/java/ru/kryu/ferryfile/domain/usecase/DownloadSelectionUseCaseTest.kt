@@ -12,8 +12,6 @@ class DownloadSelectionUseCaseTest {
     private val storage = FakeFileStorageRepository()
     private val useCase = DownloadSelectionUseCase(storage)
 
-    private fun path(raw: String) = FilePath.parse(raw)!!
-
     @Before fun setUp() {
         storage.addDirectory("0")
         storage.addFile("0/report.pdf", "pdf-bytes")
@@ -82,4 +80,6 @@ class DownloadSelectionUseCaseTest {
     @Test fun `open returns the file content`() = runTest {
         assertEquals("pdf-bytes", useCase.open(path("0/report.pdf"))!!.readBytes().toString(Charsets.UTF_8))
     }
+
+    private fun path(raw: String) = FilePath.parse(raw)!!
 }

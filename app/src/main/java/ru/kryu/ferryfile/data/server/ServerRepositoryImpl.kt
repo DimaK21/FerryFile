@@ -97,6 +97,33 @@ open class ServerRepositoryImpl @Inject constructor(
         stopInternal(dispatchService = false)
     }
 
+    override suspend fun refresh(): Unit = mutex.withLock { refreshLocked() }
+
+    /**
+     * Starts or stops the foreground service. Open + protected so tests can no-op the Android
+     * side effect while still exercising the real start/stop/refresh coordination above.
+     */
+    protected open fun launchService(
+        action: String,
+        address: String? = null,
+        port: Int? = null,
+        host: String? = null,
+        useHttps: Boolean? = null
+    ) {
+        val intent = Intent(context, FileServerService::class.java).apply {
+            this.action = action
+            if (address != null) putExtra(FileServerService.EXTRA_ADDRESS, address)
+            if (port != null) putExtra(FileServerService.EXTRA_PORT, port)
+            if (host != null) putExtra(FileServerService.EXTRA_HOST, host)
+            if (useHttps != null) putExtra(FileServerService.EXTRA_USE_HTTPS, useHttps)
+        }
+        if (action == FileServerService.ACTION_START) {
+            ContextCompat.startForegroundService(context, intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
     // Publishing Stopped before dispatching ACTION_STOP (rather than tearing the service down
     // first) is deliberate: the UI learns the truth as soon as the engine is actually gone, and
     // the service call is a pure notification-channel teardown that must not loop back here.
@@ -121,8 +148,6 @@ open class ServerRepositoryImpl @Inject constructor(
             }
         }
     }
-
-    override suspend fun refresh(): Unit = mutex.withLock { refreshLocked() }
 
     private suspend fun refreshLocked() {
         if (!server.isRunning) {
@@ -190,29 +215,4 @@ open class ServerRepositoryImpl @Inject constructor(
 
     private suspend fun address(useHttps: Boolean, port: Port): ServerAddress? =
         network.localAddress()?.let { ServerAddress(it, port, useHttps) }
-
-    /**
-     * Starts or stops the foreground service. Open + protected so tests can no-op the Android
-     * side effect while still exercising the real start/stop/refresh coordination above.
-     */
-    protected open fun launchService(
-        action: String,
-        address: String? = null,
-        port: Int? = null,
-        host: String? = null,
-        useHttps: Boolean? = null
-    ) {
-        val intent = Intent(context, FileServerService::class.java).apply {
-            this.action = action
-            if (address != null) putExtra(FileServerService.EXTRA_ADDRESS, address)
-            if (port != null) putExtra(FileServerService.EXTRA_PORT, port)
-            if (host != null) putExtra(FileServerService.EXTRA_HOST, host)
-            if (useHttps != null) putExtra(FileServerService.EXTRA_USE_HTTPS, useHttps)
-        }
-        if (action == FileServerService.ACTION_START) {
-            ContextCompat.startForegroundService(context, intent)
-        } else {
-            context.startService(intent)
-        }
-    }
 }

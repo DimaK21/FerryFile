@@ -43,17 +43,6 @@ class HomeViewModelTest {
         override suspend fun removeSharedFolder(uri: String) {}
     }
 
-    private fun viewModel(state: ServerState): HomeViewModel {
-        val server = FakeServerRepository(state)
-        return HomeViewModel(
-            ObserveServerStateUseCase(server),
-            ObserveSharedFoldersUseCase(FakeSettingsRepository()),
-            StartServerUseCase(server),
-            StopServerUseCase(server),
-            RefreshServerStateUseCase(server)
-        )
-    }
-
     @Test
     fun `stopping maps to a busy UI state without credentials`() = runTest {
         val uiState = viewModel(ServerState.Stopping).uiState.first { it.isStopping }
@@ -85,5 +74,16 @@ class HomeViewModelTest {
         val stopped = viewModel(ServerState.Stopped).uiState.first { !it.isBusy && !it.isRunning }
         assertFalse(stopped.isStopping)
         assertEquals("", stopped.url)
+    }
+
+    private fun viewModel(state: ServerState): HomeViewModel {
+        val server = FakeServerRepository(state)
+        return HomeViewModel(
+            ObserveServerStateUseCase(server),
+            ObserveSharedFoldersUseCase(FakeSettingsRepository()),
+            StartServerUseCase(server),
+            StopServerUseCase(server),
+            RefreshServerStateUseCase(server)
+        )
     }
 }
