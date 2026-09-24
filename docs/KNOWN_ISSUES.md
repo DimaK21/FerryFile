@@ -4,7 +4,7 @@
 
 ## Историческая проблема Ktor CIO `100 Continue` (не относится к текущему production runtime)
 
-Эта запись сохранена для объяснения старого device report и не является действующей проблемой текущей сборки. Она была обнаружена, когда приложение использовало Ktor CIO. Если CIO не будет возвращён, исправлять или эскалировать её для FerryFile не нужно.
+Эта запись сохранена для истории и не является действующей проблемой текущей сборки. Она была обнаружена, когда приложение использовало Ktor CIO. Если CIO не будет возвращён, исправлять или эскалировать её для FerryFile не нужно.
 
 **Symptom:** a client that sends `Expect: 100-continue` (curl does this automatically for
 request bodies above ~1 MiB; browsers' `fetch`/`XHR` do not) fails to parse the server's
@@ -61,8 +61,8 @@ task and has not been done here.
 
 The upload path creates the destination file before streaming bytes into it. If storage fails or
 the client disconnects after creation, the current SAF repository closes the stream but does not
-remove the partially written `DocumentFile`. The readiness checklist tracks cleanup, free-space
-handling, cancellation, and a user-visible policy for partial results.
+remove the partially written `DocumentFile`. Cleanup, free-space handling, cancellation, and a
+user-visible policy for partial results are still open.
 
 ## The server stops by itself after ~6 hours in the background on Android 15+
 
