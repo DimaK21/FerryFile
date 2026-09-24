@@ -20,32 +20,6 @@ import ru.kryu.ferryfile.domain.repository.SettingsRepository
 import ru.kryu.ferryfile.server.KtorServer
 import ru.kryu.ferryfile.service.FileServerService
 
-/** [NetworkRepository] whose [localAddress] suspends until the test explicitly [release]s it. */
-private class GatedNetworkRepository : NetworkRepository {
-    private val gate = CompletableDeferred<Unit>()
-    override suspend fun localAddress(): String? {
-        gate.await()
-        return "10.0.0.5"
-    }
-    fun release() {
-        gate.complete(Unit)
-    }
-}
-
-private class SequenceNetworkRepository(
-    private val addresses: MutableList<String?>
-) : NetworkRepository {
-    override suspend fun localAddress(): String? = addresses.removeAt(0)
-}
-
-private data class LaunchCall(
-    val action: String,
-    val address: String?,
-    val port: Int?,
-    val host: String?,
-    val useHttps: Boolean?
-)
-
 class ServerRepositoryImplTest {
 
     private val context: Context = mock()
@@ -72,9 +46,6 @@ class ServerRepositoryImplTest {
             launches += LaunchCall(action, address, port, host, useHttps)
         }
     }
-
-    private fun repo(network: NetworkRepository, accessCodes: InMemoryAccessCodeRepository) =
-        TestServerRepository(context, settings, network, accessCodes, server)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
@@ -336,4 +307,33 @@ class ServerRepositoryImplTest {
         assertEquals(ServerState.Stopped, repo.state.value)
         assertNull(accessCodes.current)
     }
+
+    private fun repo(network: NetworkRepository, accessCodes: InMemoryAccessCodeRepository) =
+        TestServerRepository(context, settings, network, accessCodes, server)
 }
+
+/** [NetworkRepository] whose [localAddress] suspends until the test explicitly [release]s it. */
+private class GatedNetworkRepository : NetworkRepository {
+    private val gate = CompletableDeferred<Unit>()
+    override suspend fun localAddress(): String? {
+        gate.await()
+        return "10.0.0.5"
+    }
+    fun release() {
+        gate.complete(Unit)
+    }
+}
+
+private class SequenceNetworkRepository(
+    private val addresses: MutableList<String?>
+) : NetworkRepository {
+    override suspend fun localAddress(): String? = addresses.removeAt(0)
+}
+
+private data class LaunchCall(
+    val action: String,
+    val address: String?,
+    val port: Int?,
+    val host: String?,
+    val useHttps: Boolean?
+)

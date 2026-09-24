@@ -15,37 +15,6 @@ import org.junit.Test
 import ru.kryu.ferryfile.domain.model.ServerState
 import ru.kryu.ferryfile.domain.repository.ServerRepository
 
-private class FakeServerRepository(
-    private val onStopFromService: suspend () -> Unit = {}
-) : ServerRepository {
-    override val state: StateFlow<ServerState> = MutableStateFlow(ServerState.Stopped)
-
-    var stopFromServiceCalls = 0
-    var stopCalls = 0
-    var stopCompleted = false
-    var stopCancelled = false
-
-    override suspend fun start() = error("not used")
-
-    // The UI-origin stop would dispatch ACTION_STOP back into the service being torn down.
-    override suspend fun stop() {
-        stopCalls++
-    }
-
-    override suspend fun stopFromService() {
-        stopFromServiceCalls++
-        try {
-            onStopFromService()
-            stopCompleted = true
-        } catch (cancelled: CancellationException) {
-            stopCancelled = true
-            throw cancelled
-        }
-    }
-
-    override suspend fun refresh() = Unit
-}
-
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimeLimitStopTest {
 
@@ -106,4 +75,35 @@ class TimeLimitStopTest {
         assertEquals(1, repo.stopFromServiceCalls)
         assertEquals(listOf<Throwable>(failure), loggedErrors)
     }
+}
+
+private class FakeServerRepository(
+    private val onStopFromService: suspend () -> Unit = {}
+) : ServerRepository {
+    override val state: StateFlow<ServerState> = MutableStateFlow(ServerState.Stopped)
+
+    var stopFromServiceCalls = 0
+    var stopCalls = 0
+    var stopCompleted = false
+    var stopCancelled = false
+
+    override suspend fun start() = error("not used")
+
+    // The UI-origin stop would dispatch ACTION_STOP back into the service being torn down.
+    override suspend fun stop() {
+        stopCalls++
+    }
+
+    override suspend fun stopFromService() {
+        stopFromServiceCalls++
+        try {
+            onStopFromService()
+            stopCompleted = true
+        } catch (cancelled: CancellationException) {
+            stopCancelled = true
+            throw cancelled
+        }
+    }
+
+    override suspend fun refresh() = Unit
 }

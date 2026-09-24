@@ -11,12 +11,6 @@ class SaveUploadUseCaseTest {
     private val storage = FakeFileStorageRepository()
     private val useCase = SaveUploadUseCase(storage)
 
-    private fun docs(): FilePath {
-        storage.addDirectory("0")
-        storage.addDirectory("0/docs")
-        return FilePath.parse("0/docs")!!
-    }
-
     @Test fun `writes the uploaded bytes into the destination folder`() = runTest {
         val dir = docs()
         val payload = "hello ferry"
@@ -72,5 +66,11 @@ class SaveUploadUseCaseTest {
         val result = useCase(dir, "..", "text/plain", "x".byteInputStream()) {}
 
         assertEquals("0/docs/upload", (result as SaveUploadUseCase.Result.Saved).path.raw)
+    }
+
+    private fun docs(): FilePath {
+        storage.addDirectory("0")
+        storage.addDirectory("0/docs")
+        return FilePath.parse("0/docs")!!
     }
 }

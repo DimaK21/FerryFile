@@ -40,6 +40,8 @@ class KtorServer @Inject constructor(
     private val zipStreamWriter: ZipStreamWriter,
     private val tlsCertificateManager: TlsCertificateManager
 ) {
+    val isRunning: Boolean get() = engine != null
+
     @Volatile private var engine: EmbeddedServer<*, *>? = null
     private val lifecycleMutex = Mutex()
     private var preparedTls: TlsConfiguration? = null
@@ -140,6 +142,4 @@ class KtorServer @Inject constructor(
             sessionManager.reset()
         }
     }
-
-    val isRunning: Boolean get() = engine != null
 }

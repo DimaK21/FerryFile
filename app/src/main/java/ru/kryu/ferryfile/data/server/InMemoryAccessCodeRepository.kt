@@ -10,12 +10,12 @@ import javax.inject.Singleton
 @Singleton
 class InMemoryAccessCodeRepository @Inject constructor() : AccessCodeRepository {
 
+    override val current: AccessPin? get() = pin
+
     private val random = SecureRandom()
 
     @Volatile
     private var pin: AccessPin? = null
-
-    override val current: AccessPin? get() = pin
 
     override fun issue(): AccessPin {
         val digits = buildString { repeat(AccessPin.LENGTH) { append(random.nextInt(10)) } }

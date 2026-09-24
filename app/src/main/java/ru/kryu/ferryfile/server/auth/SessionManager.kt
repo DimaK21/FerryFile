@@ -8,11 +8,6 @@ import javax.inject.Singleton
 @Singleton
 class SessionManager @Inject constructor() {
 
-    companion object {
-        private const val MAX_ATTEMPTS = 3
-        private const val COOLDOWN_MS = 30_000L
-    }
-
     private val validTokens = ConcurrentHashMap.newKeySet<String>()
     private val failedAttempts = ConcurrentHashMap<String, Int>()
     private val blockedUntil = ConcurrentHashMap<String, Long>()
@@ -45,5 +40,10 @@ class SessionManager @Inject constructor() {
     fun resetAttempts(ip: String) {
         failedAttempts.remove(ip)
         blockedUntil.remove(ip)
+    }
+
+    companion object {
+        private const val MAX_ATTEMPTS = 3
+        private const val COOLDOWN_MS = 30_000L
     }
 }

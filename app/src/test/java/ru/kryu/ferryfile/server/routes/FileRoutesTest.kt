@@ -53,23 +53,6 @@ class FileRoutesTest {
         loggedErrors.clear()
     }
 
-    private fun withApp(block: suspend ApplicationTestBuilder.() -> Unit) = testApplication {
-        install(ContentNegotiation) { json() }
-        application {
-            configureAuthForTest(sessionManager)
-            configureFileRoutes(
-                ListDirectoryUseCase(storage),
-                DownloadSelectionUseCase(storage),
-                SaveUploadUseCase(storage),
-                transferProgress,
-                ZipStreamWriter(),
-                assets,
-                logError = { message, cause -> loggedErrors += message to cause }
-            )
-        }
-        block()
-    }
-
     @Test fun `GET api-list without session returns 401`() = withApp {
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/list?path=/").status)
     }
@@ -154,61 +137,6 @@ class FileRoutesTest {
             HttpStatusCode.BadRequest,
             client.get("/api/download") { cookie("FERRYFILE_SESSION", token) }.status
         )
-    }
-
-    private fun zipEntryNames(bytes: ByteArray): List<String> {
-        val names = mutableListOf<String>()
-        java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
-            var entry = zip.nextEntry
-            while (entry != null) {
-                names += entry.name
-                entry = zip.nextEntry
-            }
-        }
-        return names
-    }
-
-    private fun multipart(fileName: String, content: String) = MultiPartFormDataContent(
-        formData {
-            append(
-                "file", content.toByteArray(),
-                Headers.build {
-                    append(HttpHeaders.ContentType, "text/plain")
-                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
-                }
-            )
-        }
-    )
-
-    /**
-     * Builds a raw multipart/form-data body by hand, deliberately *not* via
-     * `MultiPartFormDataContent`'s `ByteArray`/`ChannelProvider` helpers: a `ByteArray` part
-     * auto-attaches a per-part `Content-Length` header (steering the server into
-     * `parsePartBodyImpl`'s declared-length fast path, not the `readUntil` streaming path that
-     * actually broke), and a `ChannelProvider(size = null)` part drops the *overall* request's
-     * Content-Length along with it — which this route's own fix depends on to size its
-     * multipart limit. A hand-built `ByteArray` body gives an exact overall Content-Length
-     * (`setBody(ByteArray)` always declares its own size) with no per-part Content-Length line
-     * unless [extraPartHeaders] adds one — exactly what curl `-F` and a browser's
-     * `fetch(FormData)` actually send on the wire, and exactly the combination that exercises
-     * the streaming branch.
-     */
-    private fun rawMultipartFileBody(
-        boundary: String,
-        fileName: String,
-        contentType: String,
-        content: ByteArray,
-        extraPartHeaders: String = ""
-    ): ByteArray {
-        val preamble = (
-            "--$boundary\r\n" +
-                "Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n" +
-                "Content-Type: $contentType\r\n" +
-                extraPartHeaders +
-                "\r\n"
-            ).toByteArray(Charsets.UTF_8)
-        val epilogue = "\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8)
-        return preamble + content + epilogue
     }
 
     @Test fun `upload stores the file and answers with a serializable body`() = withApp {
@@ -373,5 +301,77 @@ class FileRoutesTest {
             setBody(multipart("notes.txt", "hello"))
         }
         assertEquals(HttpStatusCode.Unauthorized, res.status)
+    }
+
+    private fun withApp(block: suspend ApplicationTestBuilder.() -> Unit) = testApplication {
+        install(ContentNegotiation) { json() }
+        application {
+            configureAuthForTest(sessionManager)
+            configureFileRoutes(
+                ListDirectoryUseCase(storage),
+                DownloadSelectionUseCase(storage),
+                SaveUploadUseCase(storage),
+                transferProgress,
+                ZipStreamWriter(),
+                assets,
+                logError = { message, cause -> loggedErrors += message to cause }
+            )
+        }
+        block()
+    }
+
+    private fun zipEntryNames(bytes: ByteArray): List<String> {
+        val names = mutableListOf<String>()
+        java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                names += entry.name
+                entry = zip.nextEntry
+            }
+        }
+        return names
+    }
+
+    private fun multipart(fileName: String, content: String) = MultiPartFormDataContent(
+        formData {
+            append(
+                "file", content.toByteArray(),
+                Headers.build {
+                    append(HttpHeaders.ContentType, "text/plain")
+                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                }
+            )
+        }
+    )
+
+    /**
+     * Builds a raw multipart/form-data body by hand, deliberately *not* via
+     * `MultiPartFormDataContent`'s `ByteArray`/`ChannelProvider` helpers: a `ByteArray` part
+     * auto-attaches a per-part `Content-Length` header (steering the server into
+     * `parsePartBodyImpl`'s declared-length fast path, not the `readUntil` streaming path that
+     * actually broke), and a `ChannelProvider(size = null)` part drops the *overall* request's
+     * Content-Length along with it — which this route's own fix depends on to size its
+     * multipart limit. A hand-built `ByteArray` body gives an exact overall Content-Length
+     * (`setBody(ByteArray)` always declares its own size) with no per-part Content-Length line
+     * unless [extraPartHeaders] adds one — exactly what curl `-F` and a browser's
+     * `fetch(FormData)` actually send on the wire, and exactly the combination that exercises
+     * the streaming branch.
+     */
+    private fun rawMultipartFileBody(
+        boundary: String,
+        fileName: String,
+        contentType: String,
+        content: ByteArray,
+        extraPartHeaders: String = ""
+    ): ByteArray {
+        val preamble = (
+            "--$boundary\r\n" +
+                "Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n" +
+                "Content-Type: $contentType\r\n" +
+                extraPartHeaders +
+                "\r\n"
+            ).toByteArray(Charsets.UTF_8)
+        val epilogue = "\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8)
+        return preamble + content + epilogue
     }
 }

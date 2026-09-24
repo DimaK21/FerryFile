@@ -30,8 +30,6 @@ class SettingsRepositoryImplTest {
         whenever(permissions.takePersistable(any())).thenReturn(true)
     }
 
-    private fun repo() = SettingsRepositoryImpl(prefs, permissions)
-
     @Test fun `port falls back to default when stored value is out of range`() {
         whenever(prefs.getInt(eq("server_port"), any())).thenReturn(80)
         assertEquals(Port.DEFAULT, repo().port.value)
@@ -111,4 +109,6 @@ class SettingsRepositoryImplTest {
         verify(editor).putBoolean("use_https", true)
         assertTrue(repo.useHttps.value)
     }
+
+    private fun repo() = SettingsRepositoryImpl(prefs, permissions)
 }

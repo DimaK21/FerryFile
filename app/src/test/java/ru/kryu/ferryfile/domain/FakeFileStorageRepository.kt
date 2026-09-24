@@ -11,38 +11,18 @@ import java.io.OutputStream
 /** Хранилище в памяти: дерево задаётся через [addDirectory] и [addFile]. */
 class FakeFileStorageRepository : FileStorageRepository {
 
-    private val nodes = LinkedHashMap<String, FileNode>()
-    private val fileContents = LinkedHashMap<String, ByteArray>()
-
     /** Содержимое, записанное через [write], по сырому пути. */
     val writtenFiles = LinkedHashMap<String, ByteArrayOutputStream>()
 
     var createFileFails = false
 
+    private val nodes = LinkedHashMap<String, FileNode>()
+    private val fileContents = LinkedHashMap<String, ByteArray>()
+
     fun addDirectory(raw: String): FileNode = put(raw, isDirectory = true, content = null)
 
     fun addFile(raw: String, content: String = "", mimeType: String = "text/plain"): FileNode {
         val node = put(raw, isDirectory = false, content = content.toByteArray(), mimeType = mimeType)
-        return node
-    }
-
-    private fun put(
-        raw: String,
-        isDirectory: Boolean,
-        content: ByteArray?,
-        mimeType: String = "application/octet-stream"
-    ): FileNode {
-        val path = requireNotNull(FilePath.parse(raw)) { "Invalid test path: $raw" }
-        val node = FileNode(
-            path = path,
-            name = path.name,
-            sizeBytes = content?.size?.toLong() ?: 0L,
-            lastModified = 0L,
-            isDirectory = isDirectory,
-            mimeType = if (isDirectory) "vnd.android.document/directory" else mimeType
-        )
-        nodes[path.raw] = node
-        if (content != null) fileContents[path.raw] = content
         return node
     }
 
@@ -75,5 +55,25 @@ class FakeFileStorageRepository : FileStorageRepository {
     override suspend fun write(path: FilePath): OutputStream? {
         if (nodes[path.raw] == null) return null
         return ByteArrayOutputStream().also { writtenFiles[path.raw] = it }
+    }
+
+    private fun put(
+        raw: String,
+        isDirectory: Boolean,
+        content: ByteArray?,
+        mimeType: String = "application/octet-stream"
+    ): FileNode {
+        val path = requireNotNull(FilePath.parse(raw)) { "Invalid test path: $raw" }
+        val node = FileNode(
+            path = path,
+            name = path.name,
+            sizeBytes = content?.size?.toLong() ?: 0L,
+            lastModified = 0L,
+            isDirectory = isDirectory,
+            mimeType = if (isDirectory) "vnd.android.document/directory" else mimeType
+        )
+        nodes[path.raw] = node
+        if (content != null) fileContents[path.raw] = content
+        return node
     }
 }

@@ -15,21 +15,6 @@ class SafFileStorageRepositoryTest {
     private val resolver: SafPathResolver = mock()
     private val repo = SafFileStorageRepository(context, rootsProvider, resolver)
 
-    private fun folder(name: String): DocumentFile = mock<DocumentFile>().also {
-        whenever(it.isDirectory).thenReturn(true)
-        whenever(it.name).thenReturn(name)
-        whenever(it.lastModified()).thenReturn(1000L)
-    }
-
-    private fun file(name: String, size: Long, mime: String = "text/plain"): DocumentFile =
-        mock<DocumentFile>().also {
-            whenever(it.isDirectory).thenReturn(false)
-            whenever(it.name).thenReturn(name)
-            whenever(it.length()).thenReturn(size)
-            whenever(it.lastModified()).thenReturn(2000L)
-            whenever(it.type).thenReturn(mime)
-        }
-
     @Test fun `listRoot maps shared folders to indexed paths`() = runTest {
         val photos = folder("Photos")
         val docs = folder("Docs")
@@ -104,4 +89,19 @@ class SafFileStorageRepositoryTest {
         whenever(resolver.resolve(any())).thenReturn(report)
         assertNull(repo.createFile(FilePath.parse("0/report.pdf")!!, "notes.txt", "text/plain"))
     }
+
+    private fun folder(name: String): DocumentFile = mock<DocumentFile>().also {
+        whenever(it.isDirectory).thenReturn(true)
+        whenever(it.name).thenReturn(name)
+        whenever(it.lastModified()).thenReturn(1000L)
+    }
+
+    private fun file(name: String, size: Long, mime: String = "text/plain"): DocumentFile =
+        mock<DocumentFile>().also {
+            whenever(it.isDirectory).thenReturn(false)
+            whenever(it.name).thenReturn(name)
+            whenever(it.length()).thenReturn(size)
+            whenever(it.lastModified()).thenReturn(2000L)
+            whenever(it.type).thenReturn(mime)
+        }
 }

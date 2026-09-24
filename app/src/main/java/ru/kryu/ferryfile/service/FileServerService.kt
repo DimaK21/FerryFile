@@ -66,19 +66,6 @@ class FileServerService : Service() {
         data class Stop(val startId: Int) : ServerCommand
     }
 
-    companion object {
-        const val ACTION_START = "ru.kryu.ferryfile.START_SERVER"
-        const val ACTION_STOP = "ru.kryu.ferryfile.STOP_SERVER"
-        const val EXTRA_ADDRESS = "ru.kryu.ferryfile.EXTRA_ADDRESS"
-        const val EXTRA_PORT = "ru.kryu.ferryfile.EXTRA_PORT"
-        const val EXTRA_HOST = "ru.kryu.ferryfile.EXTRA_HOST"
-        const val EXTRA_USE_HTTPS = "ru.kryu.ferryfile.EXTRA_USE_HTTPS"
-        const val NOTIFICATION_ID = 1
-        const val NOTIFICATION_ID_TIME_LIMIT = 2
-        const val CHANNEL_ID = "ferryfile_server"
-        const val LOG_TAG = "FerryFileServer"
-    }
-
     override fun onCreate() {
         super.onCreate()
         val channel = NotificationChannel(
@@ -298,4 +285,16 @@ class FileServerService : Service() {
         }
     }
 
+    companion object {
+        const val ACTION_START = "ru.kryu.ferryfile.START_SERVER"
+        const val ACTION_STOP = "ru.kryu.ferryfile.STOP_SERVER"
+        const val EXTRA_ADDRESS = "ru.kryu.ferryfile.EXTRA_ADDRESS"
+        const val EXTRA_PORT = "ru.kryu.ferryfile.EXTRA_PORT"
+        const val EXTRA_HOST = "ru.kryu.ferryfile.EXTRA_HOST"
+        const val EXTRA_USE_HTTPS = "ru.kryu.ferryfile.EXTRA_USE_HTTPS"
+        const val NOTIFICATION_ID = 1
+        const val NOTIFICATION_ID_TIME_LIMIT = 2
+        const val CHANNEL_ID = "ferryfile_server"
+        const val LOG_TAG = "FerryFileServer"
+    }
 }
